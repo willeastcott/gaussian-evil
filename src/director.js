@@ -9,6 +9,10 @@
 //            for them: the engine's own takes a fifth of a second, which reads as a cut
 //   idle     nobody has touched anything for a while: the camera swings slowly about whatever it
 //            was looking at and the torch wanders over them, until somebody does
+//   demo     the scene plays by itself: a short film that loops (src/demo.js). It can be asked
+//            for, on the title card or once inside; and it starts by itself when the idle drift
+//            has gone on for a while. Asked for, it runs until a click, a tap or a key. Started
+//            by itself, moving the mouse is enough to end it
 //
 // Two things change hands between the script and the visitor.
 //
@@ -41,12 +45,15 @@ const TURN = Math.PI * 2;
  * @param {object} o.aim - From createAim: where the visitor points.
  * @param {object|null} o.lightning - From createLightning.
  * @param {object|null} o.sound - From createSoundscape.
+ * @param {object} o.demo - From createDemo: the film the scene plays by itself.
  * @param {{ focus: pc.Vec3, position: pc.Vec3 }} o.wide - The shot the opening arrives at.
  * @param {number} o.minHeight - The camera stays this far above the ground.
  * @param {(phase: string, from: string) => void} o.onPhase - Told of every change of phase.
- * @returns {object} Settings, update(dt), begin(), skip(), glide() and the phase.
+ * @param {() => void} [o.onInvite] - Called in the dark at the end of the demo: the moment to
+ * say how the torch is taken.
+ * @returns {object} Settings, update(dt), begin(), skip(), watch(), glide() and the phase.
  */
-export function createDirector({ app, camera, controls, state, aim, lightning, sound, wide, minHeight, onPhase }) {
+export function createDirector({ app, camera, controls, state, aim, lightning, sound, demo, wide, minHeight, onPhase, onInvite }) {
     const settings = {
         // ---- the opening: seconds from the way in ----
         from: { position: new pc.Vec3(-0.35, 0.5, 6.2), focus: new pc.Vec3(0, 0.95, 0) },
@@ -75,7 +82,12 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         swing: 20,              // degrees either way, round the subject
         swingEvery: 44,         // seconds for a full swing
         nod: 2,                 // degrees up and down
-        breathe: 0.06           // fraction of the distance it moves in and out
+        breathe: 0.06,          // fraction of the distance it moves in and out
+        // ---- the demo ----
+        demoAfter: 35,          // seconds of drifting before the film starts by itself; 0 for never
+        demoLead: 1.2,          // seconds of dark between the torch going out and the first shot
+        demoDim: 0.5,           // seconds the last of the light takes to go once the torch is out
+        deaf: false             // nothing the visitor does is heard: set while the film is rendered to a file (src/capture.js)
     };
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -95,6 +107,12 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
     const focus = new pc.Vec3(), wanderFrom = new pc.Vec2();
     const orbit = { focus: new pc.Vec3(), yaw: 0, pitch: 0, distance: 1 };
     let idleFor = 0, idleSwing = 0;
+    // the demo: where the film has got to, and how it came to be playing
+    const take = demo.frame();
+    let filmAt = 0, cuesFrom = -1, shotWas = -1;
+    let lead = 0;                       // seconds of dark still to go before the first shot
+    let byItself = false;               // nobody asked for it
+    let drifting = false;               // the camera was drifting when it started, and drifts on through the lead
     // a move between shots: both ends as a point looked at, and the camera's bearing from it
     const flight = { on: false, t: 0, takes: 1, from: { focus: new pc.Vec3(), yaw: 0, pitch: 0, distance: 1 }, to: { focus: new pc.Vec3(), yaw: 0, pitch: 0, distance: 1 } };
     const canvas = app.graphicsDevice.canvas;
@@ -148,23 +166,25 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         return s < 0.05 ? 1 : s < 0.11 ? 0.25 : s < 0.17 ? 0.9 : s < 0.21 ? 0.6 : 1;
     };
 
-    function switchOn() {
-        if (lit) return;
-        lit = true;
+    // the switch clicks both ways
+    function setLit(on) {
+        if (lit === on) return;
+        lit = on;
         sound?.click();
     }
 
     /** @param {boolean} cut - Whether the opening was cut short. */
     function goLive(cut) {
-        switchOn();
+        setLit(true);
         state.power = 1;
+        state.reach = 0;
         setAmbient(1);
         if (lightning) {
             lightning.settings.enabled = true;
             lightning.defer(5 + Math.random() * 6);
         }
-        // cut short, the camera is the visitor's from wherever the opening had got it to
-        handBack();
+        // cut short, the camera is the visitor's from wherever the script had got it to
+        if (!controls.enabled) handBack();
 
         if (aim.mode === 'mouse') {
             // the cursor is wherever the visitor left it: the beam goes there when it next moves
@@ -193,7 +213,7 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         }
 
         const on = t - o.torchOn;
-        if (on >= 0) switchOn();
+        if (on >= 0) setLit(true);
         state.power = on >= 0 ? catches(on) : 0;
         setAmbient(pc.math.lerp(o.dark, 1, smooth(sat(on / o.eyesAdjust))));
         const rise = smooth(sat((on - o.torchRise[0]) / (o.torchRise[1] - o.torchRise[0])));
@@ -248,7 +268,8 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         setPhase('idle');
     }
 
-    function stepIdle(dt) {
+    // the camera swings slowly about whatever it was looking at
+    function drift(dt) {
         const o = settings;
         // the drift gathers way slowly: `idleSwing` is time, run slow to begin with
         idleFor += dt;
@@ -259,10 +280,18 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         const pitch = orbit.pitch + o.nod * pc.math.DEG_TO_RAD * Math.sin(idleSwing * TURN / 31);
         const distance = orbit.distance * (1 - o.breathe * (0.5 - 0.5 * Math.cos(idleSwing * TURN / 53)));
         stand(focus, yaw, pitch, distance);
+        return k;
+    }
 
+    function stepIdle(dt) {
+        const k = drift(dt);
         // the torch wanders over them, never quite repeating
         const x = 0.5 + 0.2 * Math.sin(idleSwing * 0.37), y = 0.42 + 0.16 * Math.sin(idleSwing * 0.53 + 1.3);
         scripted.set(pc.math.lerp(wanderFrom.x, x, k), pc.math.lerp(wanderFrom.y, y, k));
+
+        // still nobody: the scene plays its film. (Not for somebody who has asked for less
+        // motion: the film has cuts in it, and the drift does not.)
+        if (!calm && settings.demoAfter > 0 && idleFor > settings.demoAfter && !document.hidden) startDemo(true);
     }
 
     function wake() {
@@ -271,16 +300,104 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         setPhase('live');
     }
 
+    // ---- the demo ----
+
+    // Point the torch at a place in the world: find where that place is on screen, which is how
+    // the torch is aimed, and how far off it is. (The camera has just been placed. Its own axes
+    // are up to date; the matrices the engine keeps for it may not be.)
+    const offset = new pc.Vec3();
+    function light(point) {
+        offset.sub2(point, camera.getPosition());
+        const ahead = Math.max(offset.dot(camera.forward), 0.05);
+        const half = Math.tan(camera.camera.fov * 0.5 * pc.math.DEG_TO_RAD) * ahead;
+        const shape = canvas.clientWidth / Math.max(canvas.clientHeight, 1);
+        scripted.set(0.5 + 0.5 * offset.dot(camera.right) / (half * shape), 0.5 - 0.5 * offset.dot(camera.up) / half);
+        state.reach = offset.length();
+    }
+
+    /**
+     * The film, from the top.
+     *
+     * @param {boolean} unasked - Whether it is starting by itself, with nobody there.
+     */
+    function startDemo(unasked) {
+        const from = phase;
+        byItself = unasked;
+        drifting = from === 'idle';
+        if (flight.on) handBack();
+        // On the title card the scene is dark already, and stands at the first frame of the film.
+        // From anywhere else the torch goes out first, and the film starts in the dark that
+        // leaves: a cut that nobody sees. Until then a camera in the visitor's hands stays there.
+        lead = from === 'title' ? 0 : settings.demoLead;
+        if (lead > 0) setLit(false);
+        else controls.enabled = false;
+        filmAt = 0;
+        cuesFrom = -1;
+        shotWas = -1;
+        scripted.copy(state.pointer);
+        owner = ownerTarget = 0;
+        if (lightning) lightning.settings.enabled = false;
+        beganWall = performance.now();
+        setPhase('demo');
+    }
+
+    function stepDemo(dt) {
+        const o = settings;
+        if (lead > 0) {
+            lead -= dt;
+            state.power = 0;
+            setAmbient(pc.math.lerp(1, o.dark, smooth(sat((o.demoLead - lead) / o.demoDim))));
+            if (drifting) drift(dt);
+            if (lead > 0) return;
+            controls.enabled = false;
+        } else {
+            filmAt += dt;
+            if (filmAt >= demo.length) {
+                // round again: the film ends in the dark, and begins in it
+                filmAt -= demo.length;
+                cuesFrom = -1;
+            }
+        }
+
+        demo.sample(filmAt, take);
+        stand(take.focus, take.yaw, take.pitch, take.distance);
+        light(take.target);
+        state.handTarget.copy(take.hand);
+        if (take.shot !== shotWas) {
+            // a cut: the beam is on its new mark at once, it does not swing across to it
+            shotWas = take.shot;
+            state.snap = true;
+        }
+
+        const on = filmAt - demo.torchOn, off = filmAt - demo.torchOff;
+        const burning = on >= 0 && off < 0;
+        setLit(burning);
+        state.power = burning && !take.blank ? catches(on) * take.power : 0;
+        setAmbient(take.blank ? 0 : off >= 0 ? pc.math.lerp(1, o.dark, smooth(sat(off / o.demoDim))) : pc.math.lerp(o.dark, 1, smooth(sat(on / o.eyesAdjust))));
+
+        for (const s of demo.strikes) {
+            if (s.at > cuesFrom && s.at <= filmAt) lightning?.strike({ azimuth: s.from * pc.math.DEG_TO_RAD, height: s.height, near: s.near });
+        }
+        for (const s of demo.groans) {
+            if (s.at > cuesFrom && s.at <= filmAt) sound?.groan(s.level);
+        }
+        if (demo.invite > cuesFrom && demo.invite <= filmAt) onInvite?.();
+        cuesFrom = filmAt;
+    }
+
     // anything the visitor does: runs before the canvas hears of it, so that a drag which wakes
     // the scene is already the camera's by the time it starts
-    const CUTS = ['Space', 'Enter', 'Escape'];      // the keys that cut the opening short
+    const CUTS = ['Space', 'Enter', 'Escape'];      // the keys that cut the opening, or the demo, short
     const stirred = (e) => {
         // (a key held with Ctrl or Alt is for the browser, not for us)
-        if (e.type === 'keydown' && (e.ctrlKey || e.altKey || e.metaKey || (phase === 'opening' && !CUTS.includes(e.code)))) return;
+        if (settings.deaf) return;
+        const playing = phase === 'opening' || phase === 'demo';
+        if (e.type === 'keydown' && (e.ctrlKey || e.altKey || e.metaKey || (playing && !CUTS.includes(e.code)))) return;
         lastActivity = clock;
         if (phase === 'idle') {
             wake();
-        } else if (phase === 'opening' && performance.now() - beganWall > 600) {
+        } else if (playing && performance.now() - beganWall > 600) {
+            // (the click or key that started it is not also the one that ends it)
             goLive(true);
         } else if (flight.on && e.target === canvas && e.type !== 'keydown') {
             // taking hold of the camera part way through a move stops the move there
@@ -292,13 +409,15 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
     /** @param {number} dt - Seconds since the last frame. Call it before the torch is placed. */
     function update(dt) {
         clock += dt;
-        if (aim.take()) {
+        if (aim.take() && !settings.deaf) {
             lastActivity = clock;
             if (phase === 'idle') wake();
+            else if (phase === 'demo' && byItself) goLive(true);
             if (phase === 'live' || (phase === 'opening' && clock - began > settings.torchOn + settings.torchYours)) ownerTarget = 1;
         }
 
         if (phase === 'opening') stepOpening();
+        else if (phase === 'demo') stepDemo(dt);
         else if (phase === 'idle') stepIdle(dt);
         else if (flight.on) stepGlide(dt);
         else if (phase === 'live' && settings.idleAfter > 0 && clock - lastActivity > settings.idleAfter && !document.hidden) goIdle();
@@ -342,8 +461,24 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
             scripted.set(settings.torchTo[0], settings.torchTo[1]);
             goLive(false);
         },
+        /** Play the demo: instead of the opening, or from inside the scene. */
+        watch() {
+            if (phase === 'title' || phase === 'live' || phase === 'idle') startDemo(false);
+        },
+        /** @param {number} t - Jump to this many seconds into the demo: for trying a shot out. */
+        seek(t) {
+            if (phase !== 'demo') return;
+            lead = 0;
+            controls.enabled = false;
+            filmAt = cuesFrom = pc.math.clamp(t, 0, demo.length - 0.001);
+            shotWas = -1;
+        },
         glide,
         idle: goIdle,
-        get phase() { return phase; }
+        get phase() { return phase; },
+        /** Whether the demo that is playing started by itself. */
+        get byItself() { return phase === 'demo' && byItself; },
+        /** Seconds into the demo. */
+        get filmAt() { return filmAt; }
     };
 }

@@ -9,12 +9,14 @@
 // Query: ?device=webgl2|webgpu  ?proxy=1 (draw the envelope that receives light over the splats)  ?proxy=2 (draw the surface that casts the shadows)  ?debug (stats)
 //        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
 //        ?intro=0 (no title card and no opening: straight to the torch)  ?idle=N (seconds before the scene drifts by itself; 0 for never)  ?mist=0
+//        ?demo (no title card: the scene plays by itself, as a film, until somebody clicks)  ?demo=0 (Enter hands the torch over after a short opening, with no film)
 import * as pc from 'playcanvas';
 import { CameraControls } from 'playcanvas/scripts/esm/camera-controls.mjs';
 import { GSplatRelighting } from 'playcanvas/scripts/esm/gsplat/gsplat-relighting.mjs';
 
 import { createAim } from './aim.js';
 import { createSoundscape } from './audio.js';
+import { createDemo } from './demo.js';
 import { createDirector } from './director.js';
 import { createGround } from './ground.js';
 import { createLightning } from './lightning.js';
@@ -250,6 +252,8 @@ app.root.addChild(torch);
 const state = {
     pointer: new pc.Vec2(0.5, 0.36),       // where the torch points, as a fraction of the canvas
     power: 0,                              // 0 off .. 1 on
+    reach: 0,                              // metres to what it lights, when a script says so; 0: as far as the camera's subject
+    snap: false,                           // set to put the beam on its mark at once: after a cut
     hand: WIDE.hand.clone(),               // torch offset from the camera: right, up, forward (m)
     handTarget: WIDE.hand.clone(),
     aim: new pc.Vec3().copy(WIDE.focus),
@@ -264,11 +268,13 @@ const tmpA = new pc.Vec3(), tmpB = new pc.Vec3(), tmpC = new pc.Vec3();
 function updateTorch(dt) {
     const eye = camera.getPosition();
     // aim at the point under the pointer, at the distance of whatever the camera is looking at
-    const depth = tmpA.sub2(controls.focusPoint, eye).dot(camera.forward);
+    const depth = state.reach || tmpA.sub2(controls.focusPoint, eye).dot(camera.forward);
     const r = canvas.getBoundingClientRect();
     camera.camera.screenToWorld(state.pointer.x * r.width, state.pointer.y * r.height, Math.max(0.3, depth), tmpB);
-    state.aim.lerp(state.aim, tmpB, 1 - Math.exp(-state.smoothing * dt));
-    state.hand.lerp(state.hand, state.handTarget, 1 - Math.exp(-4 * dt));
+    // (the beam follows its mark as a hand would; after a cut it is simply there)
+    state.aim.lerp(state.aim, tmpB, state.snap ? 1 : 1 - Math.exp(-state.smoothing * dt));
+    state.hand.lerp(state.hand, state.handTarget, state.snap ? 1 : 1 - Math.exp(-4 * dt));
+    state.snap = false;
 
     // The torch is held out to one side for modelling. Up close that same offset becomes a steep
     // raking light, which blacks out the far side of a nose, so the offset shrinks with the
@@ -320,8 +326,10 @@ setPost(query.get('post') !== '0');
 
 // ---- views ----
 const views = { wide: WIDE };
+const subjects = {};        // the two of them, in world space: for the demo's close-ups
 for (const [name, { head, facing, hand }] of Object.entries(HEADS)) {
     const h = toWorld(head), f = dirToWorld(facing);
+    subjects[name] = { head: h, facing: f, hand: new pc.Vec3(...hand) };
     views[name] = { focus: h.clone().add(f.clone().mulScalar(0.07)), position: h.clone().add(f.clone().mulScalar(0.85)).add(new pc.Vec3(0, 0.03, 0)), hand: new pc.Vec3(...hand) };
 }
 function setView(name) {
@@ -330,7 +338,8 @@ function setView(name) {
     state.handTarget.copy(v.hand);
 }
 
-// ---- the visit: title card, opening, the torch handed over, and a drift when left alone ----
+// ---- the visit: title card, opening, the torch handed over, a drift when left alone, and a
+// film that the scene plays by itself (src/demo.js) ----
 const hint = $('hint');
 let hintTimer = 0;
 /**
@@ -349,13 +358,40 @@ const HOW = {
     tilt: 'Turn your phone to aim the torch · drag to look around · pinch to zoom'
 };
 
+const demo = createDemo({ wide: WIDE, him: subjects.him, her: subjects.her });
+const invite = () => showHint(aim.touch ? 'Tap to take the torch' : 'Click to take the torch', 3);
+let told = false;
+let demoBegan = 0;
+
 const director = createDirector({
-    app, camera, controls, state, aim, lightning, sound, wide: WIDE, minHeight: CAMERA_MIN_HEIGHT,
+    app, camera, controls, state, aim, lightning, sound, demo, wide: WIDE, minHeight: CAMERA_MIN_HEIGHT,
     onPhase: (phase, from) => {
         document.body.dataset.phase = phase;
+        // the film is of the torch: it does not play over the capture as it was shot
+        if (phase === 'demo') {
+            setRelighting(true);
+            demoBegan = performance.now();
+        }
+        if (from === 'demo') showHint('');
         // how to hold the torch is said once, when it is first handed over
-        if (phase === 'live' && from === 'opening') setTimeout(() => showHint(HOW[aim.mode], 8), 1200);
-    }
+        if (phase === 'live' && !told && (from === 'opening' || from === 'demo')) {
+            told = true;
+            setTimeout(() => director.phase === 'live' && showHint(HOW[aim.mode], 8), 1200);
+        }
+    },
+    onInvite: invite
+});
+
+// While the film plays for somebody who asked for it, there is no pointer on it and moving the
+// mouse changes nothing. But it does bring the pointer back, and with it how to take over.
+// (Not in the first moments: the mouse is still on its way from the button.)
+let nudged = 0;
+canvas.addEventListener('pointermove', (e) => {
+    if (director.phase !== 'demo' || director.byItself || e.pointerType === 'touch' || performance.now() - demoBegan < 2000) return;
+    invite();
+    document.body.classList.add('nudged');
+    clearTimeout(nudged);
+    nudged = setTimeout(() => document.body.classList.remove('nudged'), 3000);
 });
 if (query.has('idle')) director.settings.idleAfter = Number(query.get('idle'));
 direct = director.update;
@@ -376,16 +412,21 @@ $('relight').addEventListener('click', () => setRelighting(!relighting.enabled))
 const strikeNear = () => lightning?.strike({ near: 0.8 + Math.random() * 0.2 });
 $('strike').addEventListener('click', strikeNear);
 $('strike').hidden = !lightning;
+$('play').addEventListener('click', () => director.watch());
 $('fullscreen').addEventListener('click', toggleFullscreen);
 $('fullscreen').hidden = !document.fullscreenEnabled;
 // a button that keeps the focus would take the next press of Space for itself
 $('hud').addEventListener('click', () => /** @type {HTMLElement} */ (document.activeElement)?.blur());
 window.addEventListener('keydown', (e) => {
-    if (director.phase !== 'live' || e.repeat || e.target instanceof HTMLButtonElement) return;
+    if (e.repeat || e.target instanceof HTMLButtonElement) return;
+    const phase = director.phase;
+    // (the film is worth the whole screen, so F works while it plays)
+    if (e.code === 'KeyF' && (phase === 'live' || phase === 'demo') && document.fullscreenEnabled) toggleFullscreen();
+    if (phase !== 'live') return;
     if (e.code === 'Space') setRelighting(!relighting.enabled);
     if (e.code === 'KeyL') strikeNear();
     if (e.code === 'KeyP') setPost(!post.enabled);
-    if (e.code === 'KeyF' && document.fullscreenEnabled) toggleFullscreen();
+    if (e.code === 'KeyD') director.watch();
 });
 
 if (query.has('debug')) {
@@ -402,7 +443,11 @@ if (query.has('debug')) {
 }
 
 // ---- the way in ----
-if (query.get('intro') === '0') {
+if (query.has('demo') && query.get('demo') !== '0') {
+    // nobody has clicked anything, so there is no sound until somebody does
+    title.dismiss(true);
+    director.watch();
+} else if (query.get('intro') === '0') {
     title.dismiss(true);
     director.skip();
 } else {
@@ -420,16 +465,27 @@ if (query.get('intro') === '0') {
         app.on('frameend', count);
         setTimeout(done, 3000);
     });
-    title.ready(aim.touch ? 'Sound on · turn your phone to aim' : 'Best with sound', () => {
+    // Enter plays the film: the scene shows what it can do before it asks anything of the
+    // visitor. A click or a tap at any moment takes the torch, and a line says so once the torch
+    // is on. (?demo=0 is the older way in: a short opening, and the torch is handed over.)
+    const film = query.get('demo') !== '0';
+    title.ready(aim.touch ? 'Sound on · tap to take the torch' : 'Best with sound · click to take the torch', () => {
         // inside the click: sound may start, and an iPhone may be asked which way it is facing
         const audible = sound ? sound.start().catch(() => {}) : Promise.resolve();
         aim.enableTilt();
         title.dismiss();
-        // the opening waits for the sound to be decoded, but not for long: the thunder is part of it
-        Promise.race([audible, new Promise(resolve => setTimeout(resolve, 2500))]).then(() => director.begin());
+        // what follows waits for the sound to be decoded, but not for long: the thunder is part of it
+        Promise.race([audible, new Promise(resolve => setTimeout(resolve, 2500))]).then(() => {
+            if (!film) return director.begin();
+            director.watch();
+            setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
+        });
     });
 }
 
 if (import.meta.env.DEV) {
-    window.__sr = { pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
+    // rendering the film to a video file (src/capture.js): __sr.capture.run()
+    const { createCapture } = await import('./capture.js');
+    const capture = createCapture({ pc, app, director, demo, sound, relens: frameLens });
+    window.__sr = { capture, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
 }

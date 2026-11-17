@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "bake": "node --max-old-space-size=4096 tools/bake-proxy.mjs raw/scene.ply public/proxy.glb",
-    "audio": "node tools/build-audio.mjs"
+    "audio": "node tools/build-audio.mjs",
+    "film": "node tools/finish-video.mjs"
   },
   "dependencies": {
     "playcanvas": "^2.24.0"

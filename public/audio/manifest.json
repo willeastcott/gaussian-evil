@@ -10,5 +10,11 @@
     "thunder-mid-a": 9.919,
     "thunder-mid-b": 8.93,
     "thunder-far-a": 9.825
+  },
+  "groans": {
+    "groan-a": 4,
+    "groan-b": 4,
+    "groan-c": 2.963,
+    "groan-d": 4.406
   }
 }

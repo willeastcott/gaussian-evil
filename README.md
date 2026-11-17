@@ -2,7 +2,7 @@
 
 A Gaussian splat capture of two people, in the dark and the rain, relit in real time by a torch that you hold. Built with PlayCanvas.
 
-It opens on a title card. Enter, and there is darkness and rain; lightning shows the two of them for an instant; then the torch clicks on at their feet, climbs to their faces, and is yours.
+It opens on a title card. Enter, and the scene plays by itself: darkness and rain; lightning shows the two of them for an instant; the torch clicks on at their feet and climbs to their faces; then a 36-second film of five shots, which loops. Click or tap at any moment and the torch is yours.
 
 | | Mouse | Touch |
 |---|---|---|
@@ -10,7 +10,7 @@ It opens on a title card. Enter, and there is darkness and rain; lightning shows
 | Look around | drag | drag |
 | Zoom | scroll | pinch |
 
-Along the bottom: three shots (Both, Him, Her), lightning now (L), the capture as it was shot, without the torch (Space), sound, and full screen (F). P switches the post effects off and on. Lightning also strikes by itself every 7 to 16 seconds. Leave it alone for 25 seconds and the camera and the torch drift by themselves until you touch something.
+Along the bottom: three shots (Both, Him, Her), the film (D), lightning now (L), the capture as it was shot, without the torch (Space), sound, and full screen (F). P switches the post effects off and on. Lightning also strikes by itself every 7 to 16 seconds. Leave it alone for 25 seconds and the camera and the torch drift by themselves; leave it for 35 more and the film plays, until you touch something.
 
 ## How it works
 
@@ -71,7 +71,7 @@ Each drop splashes where it lands (`src/splash.js`). Nothing is simulated on the
 
 ### The visit
 
-`src/director.js` gives a visit its shape: title card, opening, the torch handed over, and a drift when nobody is steering. Two things change hands between the script and the visitor.
+`src/director.js` gives a visit its shape: title card, opening, the torch handed over, a drift when nobody is steering, and the film. Two things change hands between the script and the visitor.
 
 The camera. While the script has it, the engine's orbit controls are switched off and the camera is placed directly; handing it back is `controls.focusPoint = ...`, which makes the controls take up the camera from wherever it stands, so there is never a jump. Moves between the three shots are flown the same way, round whatever the camera is looking at, over a second or two. (The controls' own move is over in a fifth of a second: with fly mode off they ignore `focusDamping` and use the damping meant for drags.)
 
@@ -80,6 +80,16 @@ The torch. The point on screen it aims at is a mix of where the script points it
 The title card (`src/title.js`) is there for more than looks. A browser will not play sound, nor an iPhone report its orientation, until something has been clicked, so the way in is a button and both are started from it. The scene is already drawing behind the card, dark, so the first frames, which build shaders and sort the splats, are over before anything is seen. The bar shows bytes: the splat loader reports its progress.
 
 On a screen held upright the lens widens from 40° to as much as 62° top to bottom, to keep the same width in view: the two of them stand side by side, and from the same place a phone would cut off his elbow and her pistol.
+
+### The film
+
+`src/demo.js` is the scene playing by itself: five shots cut together, 36.5 seconds, looping. Dark, and lightning shows the pair from behind; the torch comes on at their feet and climbs. Her, close. Him, cut to on a flash. Down by the water, where the beam comes across the puddles and lightning fills them with sky. Then up and back until the torch goes out. It ends and begins in the dark, so the loop has no seam, and a line there says how to take the torch.
+
+It is for three things: a clip to share, which is how a demo like this travels; a screen left running; and the visitor who would sooner watch than steer. So there are four ways in: Enter on the title card (`?demo=0` makes Enter a short opening that hands the torch straight over), the play button or D once inside, `?demo` (no title card, and so no sound until somebody clicks), and the idle drift, which hands over to it after 35 seconds. Asked for, it runs until a click, a tap, Space, Enter or Escape; started by itself, moving the mouse is enough. Either way the camera is handed back where it stands. F still works, for a recording, and the pointer is hidden until the mouse moves.
+
+A shot is a run from one camera to another at a steady speed, so the camera is already moving when a shot is cut to and still moving when it is cut from. A camera is written as the point it looks at and its bearing from that point, which makes the run an arc round the subject. The torch is written as the point in the world it lights; the director turns that into the point on screen that the torch is aimed through, and the distance, every frame. After a cut the beam is put on its mark at once. Up close the torch is turned down, or it burns a face out. Lightning comes on cue, so every run is the same.
+
+One cut goes right round to the far side of the pair. With WebGL 2 the splats are sorted off the main thread, and the first frame after a jump like that is still drawn in the old order: measured, 7% of the picture is wrong for one frame (WebGPU shows nothing). So that shot opens on 80 milliseconds of black, and the lightning that follows is what shows him.
 
 ### Lightning
 
@@ -100,6 +110,7 @@ The scene is mostly black, so effects that only touch bright areas or corners ar
 - Rain is three recorded textures at once: drops on asphalt, drops in puddles, and the wash of rain further off. Each loops with a crossfade made on the decoded samples, starts at its own point, runs at a slightly different speed and drifts a couple of decibels on its own cycle. The puddles come forward when the camera is down near the water.
 - Wind is synthesised from filtered noise and follows the same gusts that move her hair and dress.
 - The torch clicks when it comes on: a tick of filtered noise with a short thump under it, synthesised.
+- Very occasionally something groans, a long way off: four recorded voices, never the same one twice running, one or two minutes apart. Each is slowed, dulled, set off to one side and given a late echo off the wet ground. The film asks for two of its own.
 - Thunder follows each lightning strike. Every strike has a distance, which sets how bright the flash is, how long the thunder takes to arrive (0.2 to 3.2 seconds), how loud and how dull it is, and which recording is used. It is panned to the side of the sky the bolt came from.
 
 The recordings come from the ElevenLabs sound-generation API through `npm run audio` (`tools/build-audio.mjs`). Raw takes are cached in `tools/audio-raw/`, so a rebuild needs no key. These generations often carry a steady buzz at 200 Hz and its harmonics, so the tool looks for any steady tone in each take, notches it out and checks again. A generated wind was buzz from 400 Hz to 13 kHz, which is why the wind is synthesised.
@@ -111,7 +122,17 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never).
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never, which also means the film never starts by itself), `?demo` to open on the film with no title card.
+
+## Render the film to a video
+
+A screen recording drops frames, so the film is rendered instead (`src/capture.js`, dev server only). Open `http://localhost:5173/?demo` and run `__sr.capture.run()` in the console; `__sr.capture.state` says how far it has got. Every frame is stepped by exactly 1/60 s, drawn at 1920 x 1080 and encoded by the browser (WebCodecs H.264). The sound is rendered, not recorded: the same audio code runs on an `OfflineAudioContext`, and whatever would have been played is scheduled at the moment the film has reached. Both land in `captures/`. Then:
+
+```
+npm run film
+```
+
+joins them into `captures/gaussian-evil-film.mp4` (x264 CRF 18, AAC, sound brought to -18 LUFS by one fixed gain). The video runs 5.8 seconds past the end of the film, into the lightning that opens its loop: the title comes up in the dark, the flash shows the pair under it, and the credit for the capture is on screen. `run({ width: 1080, height: 1920 })` renders it upright.
 
 ## Rebuild the data
 

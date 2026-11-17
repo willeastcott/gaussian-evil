@@ -12,6 +12,12 @@
 //     came from; a far one rumbles seconds later, quiet and dull
 //
 //   - the torch clicks when it is switched on (src/director.js)
+//   - and, very occasionally, something groans, a long way off in the dark. A minute or two
+//     apart, never the same one twice running, dulled and quiet as a far voice in rain is
+//
+// The film can be rendered to a file (src/capture.js). Its sound is then not recorded but
+// rendered: the same graph is built on an OfflineAudioContext and the same code drives it, so
+// whatever would have been played "now" is scheduled at the moment the film has reached.
 //
 // A browser will not play sound until the page has been clicked or a key pressed, so the first
 // such gesture starts it (the way in on the title card, src/title.js, is one); the Sound button
@@ -34,6 +40,7 @@ const THUNDER = {
     mid: ['thunder-mid-a', 'thunder-mid-b'],
     far: ['thunder-far-a', 'thunder-mid-a']
 };
+const GROANS = ['groan-a', 'groan-b', 'groan-c', 'groan-d'];
 const dbToGain = db => Math.pow(10, db / 20);
 
 /**
@@ -49,12 +56,15 @@ export function createSoundscape({ app, camera, rain, button }) {
         volume: 0.7,
         rain: 1,
         wind: 0.5,
-        thunder: 1
+        thunder: 1,
+        groans: 1,              // 0 for none
+        groanFirst: [40, 80],   // seconds before the first one
+        groanEvery: [70, 160]   // seconds between them after that
     };
 
     // the files are fetched straight away; they can only be decoded once there is a context
     const files = fetch('audio/manifest.json').then(r => r.json()).then(async (manifest) => {
-        const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder)];
+        const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder), ...Object.keys(manifest.groans ?? {})];
         const data = await Promise.all(names.map(n => fetch(`audio/${n}.mp3`).then(r => r.arrayBuffer())));
         return Object.fromEntries(names.map((n, i) => [n, data[i]]));
     });
@@ -62,7 +72,14 @@ export function createSoundscape({ app, camera, rain, button }) {
     let ctx = null, master = null, analyser = null, started = false, on = false, ready = false;
     const buffers = {}, beds = {};
     let wind = null;
-    let clock = 0, lastThunder = '';
+    let clock = 0, lastThunder = '', lastGroan = '';
+    const between = r => r[0] + Math.random() * (r[1] - r[0]);
+    let nextGroan = between(settings.groanFirst);       // seconds of sound from now
+
+    // While the film is being rendered, `offlineAt` is how many seconds of it there are so far.
+    let offlineAt = -1;
+    const now = () => (offlineAt >= 0 ? offlineAt : ctx.currentTime);
+    const audible = () => !!ctx && on && (offlineAt >= 0 || ctx.state === 'running');
 
     // a seamless loop: the last `xf` seconds crossfade (equal power) into the start. Done on the
     // decoded samples because the padding an MP3 carries breaks a loop made on the file
@@ -137,7 +154,7 @@ export function createSoundscape({ app, camera, rain, button }) {
     // A strike may come while the sound is still being started: the click that asked for the
     // lightning can be the very click that starts the sound. Its thunder waits for the decoding.
     function thunder(strike) {
-        if (on && ctx && building && (ctx.state !== 'running' || !ready)) {
+        if (offlineAt < 0 && on && ctx && building && (ctx.state !== 'running' || !ready)) {
             building.then(() => ctx.resume()).then(() => rumble(strike));
         } else {
             rumble(strike);
@@ -145,7 +162,7 @@ export function createSoundscape({ app, camera, rain, button }) {
     }
 
     function rumble({ near, from }) {
-        if (!on || !ctx || ctx.state !== 'running') return;
+        if (!audible()) return;
         const pool = THUNDER[near > 0.72 ? 'near' : near > 0.42 ? 'mid' : 'far'].filter(n => buffers[n] && n !== lastThunder);
         if (!pool.length) return;
         const name = lastThunder = pool[Math.floor(Math.random() * pool.length)];
@@ -165,16 +182,52 @@ export function createSoundscape({ app, camera, rain, button }) {
         pan.pan.value = pc.math.clamp((from.x * r.x + from.z * r.z) / len, -1, 1) * 0.7;
         src.connect(dull).connect(gain).connect(pan).connect(master);
         // sound takes about three seconds a kilometre: from next door to a kilometre off
-        src.start(ctx.currentTime + pc.math.lerp(3.2, 0.2, near) * (0.9 + Math.random() * 0.2));
+        src.start(now() + pc.math.lerp(3.2, 0.2, near) * (0.9 + Math.random() * 0.2));
         src.onended = () => pan.disconnect();
     }
     app.on('lightning:strike', thunder);
 
     // the switch on the torch: a sharp tick, with a little of the body of the torch under it.
     // Made here, like the wind: it is forty milliseconds long
+    /**
+     * Something groans, far off. It comes by itself now and then; a script may also ask for one.
+     *
+     * @param {number} [level] - How loud, in dB: it is a long way away.
+     */
+    function groan(level = -9) {
+        nextGroan = between(settings.groanEvery);
+        if (!audible() || !settings.groans) return;
+        const pool = GROANS.filter(n => buffers[n] && n !== lastGroan);
+        if (!pool.length) return;
+        const name = lastGroan = pool[Math.floor(Math.random() * pool.length)];
+
+        const src = ctx.createBufferSource();
+        src.buffer = buffers[name];
+        src.playbackRate.value = 0.78 + Math.random() * 0.16;      // slower, and so lower: larger, further
+        // distance and rain take the top off a voice
+        const dull = ctx.createBiquadFilter();
+        dull.type = 'lowpass';
+        dull.frequency.value = 900 + Math.random() * 700;
+        const gain = ctx.createGain();
+        gain.gain.value = dbToGain(level - Math.random() * 4) * settings.groans;
+        // off to one side or the other, never dead ahead
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.5);
+        // a little of it comes back off the wet ground, late
+        const echo = ctx.createDelay(0.5);
+        echo.delayTime.value = 0.19 + Math.random() * 0.08;
+        const echoGain = ctx.createGain();
+        echoGain.gain.value = 0.3;
+        src.connect(dull).connect(gain).connect(pan).connect(master);
+        gain.connect(echo).connect(echoGain).connect(master);
+        src.start(now() + 0.02);
+        // (the echo outlives the voice by a quarter of a second)
+        src.onended = () => setTimeout(() => { pan.disconnect(); echoGain.disconnect(); }, 600);
+    }
+
     function click() {
-        if (!on || !ctx || ctx.state !== 'running') return;
-        const t = ctx.currentTime + 0.01;
+        if (!audible()) return;
+        const t = now() + 0.01;
 
         const n = Math.floor(ctx.sampleRate * 0.05), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
         for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
@@ -209,18 +262,21 @@ export function createSoundscape({ app, camera, rain, button }) {
     app.on('update', (dt) => {
         clock += dt;
         if (!ctx || !on) return;
-        const now = ctx.currentTime;
+        const t = now();
+        if (offlineAt >= 0) offlineAt += dt;
+        // (the film asks for its own groans: none come by chance while it is rendered)
+        else if (ctx.state === 'running' && (nextGroan -= dt) <= 0) groan();
 
         for (const [name, b] of Object.entries(beds)) {
             let g = BEDS[name].gain * settings.rain * dbToGain(2 * Math.sin(clock * 2 * Math.PI / b.drift + b.phase));
             // drops in water are a small sound: you hear them when you are down near them
             if (name === 'rain-puddles') g *= pc.math.lerp(0.7, 1.6, pc.math.clamp(1 - camera.getPosition().y / 1.6, 0, 1));
-            b.node.gain.setTargetAtTime(g, now, 0.3);
+            b.node.gain.setTargetAtTime(g, t, 0.3);
         }
         if (wind) {
             const g = gust(clock);     // 0.1 .. 1
-            wind.gain.gain.setTargetAtTime(settings.wind * (0.06 + 0.5 * g * g), now, 0.25);
-            wind.band.frequency.setTargetAtTime(170 + 330 * g, now, 0.25);
+            wind.gain.gain.setTargetAtTime(settings.wind * (0.06 + 0.5 * g * g), t, 0.25);
+            wind.band.frequency.setTargetAtTime(170 + 330 * g, t, 0.25);
         }
 
         analyser.getFloatTimeDomainData(data);
@@ -237,6 +293,7 @@ export function createSoundscape({ app, camera, rain, button }) {
     // resolves once everything is decoded and playing, whichever call got there first
     let building = null;
     async function start() {
+        if (offlineAt >= 0) return;
         on = true;
         show();
         if (!started) {
@@ -256,6 +313,7 @@ export function createSoundscape({ app, camera, rain, button }) {
     }
 
     function stop() {
+        if (offlineAt >= 0) return;
         on = false;
         show();
         if (!ctx) return;
@@ -276,5 +334,51 @@ export function createSoundscape({ app, camera, rain, button }) {
     button?.addEventListener('click', () => (on ? stop() : start()));
     show();
 
-    return { settings, start, stop, click, meter, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
+    /**
+     * Render to a buffer instead of playing. From now until render() is called, the updates of
+     * the scene schedule their sound on an offline graph, at the time those updates have reached.
+     *
+     * @param {number} seconds - How long the result is.
+     * @param {number} [fadeIn] - Seconds it takes to come up at the start.
+     * @param {number} [fadeOut] - Seconds it takes to go at the end.
+     * @returns {Promise<{ render: () => Promise<AudioBuffer> }>} Call render() when the updates are done.
+     */
+    async function offline(seconds, fadeIn = 0.5, fadeOut = 2) {
+        const live = { ctx, master, analyser, on, wind, ready, beds: { ...beds } };
+        const restore = () => {
+            offlineAt = -1;
+            for (const k of Object.keys(beds)) delete beds[k];
+            Object.assign(beds, live.beds);
+            ({ ctx, master, analyser, on, wind, ready } = live);
+        };
+        try {
+            ctx = new OfflineAudioContext(2, Math.ceil(seconds * 48000), 48000);
+            master = ctx.createGain();
+            master.gain.setValueAtTime(0, 0);
+            master.gain.linearRampToValueAtTime(settings.volume, fadeIn);
+            master.gain.setValueAtTime(settings.volume, seconds - fadeOut);
+            master.gain.linearRampToValueAtTime(0, seconds);
+            analyser = ctx.createAnalyser();
+            master.connect(analyser).connect(ctx.destination);
+            for (const k of Object.keys(beds)) delete beds[k];
+            wind = null;
+            await build();
+            on = true;
+            offlineAt = 0;
+        } catch (err) {
+            restore();
+            throw err;
+        }
+        return {
+            async render() {
+                try {
+                    return await ctx.startRendering();
+                } finally {
+                    restore();
+                }
+            }
+        };
+    }
+
+    return { settings, start, stop, click, groan, offline, meter, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
 }
