@@ -14,7 +14,13 @@ Splats carry their capture lighting baked in, and have no usable normals of thei
 
 The torch is a shadow-casting spot light. It lights the proxy mesh and the floor.
 
-The two meshes have different jobs (`src/shadow-caster.js`). The real surface casts the shadows, on the figures and on the ground. The envelope receives the light, grown outwards by 1.2 cm first: lighting is looked up per pixel, and a splat reaches a little past the surface it sits on, so without the margin a few pixels at each silhouette would find no mesh behind them. The envelope casts nothing, because a limb that much too thick throws a shadow that much too wide.
+The two meshes have different jobs (`src/shadow-caster.js`). The real surface casts the shadows, on the figures and on the ground. The envelope receives the light, grown outwards by 0.4 cm first: a splat reaches a little past the surface it sits on. The envelope casts nothing, because a limb that is too thick throws a shadow that is too wide.
+
+### Light from the right depth
+
+The lighting texture holds one surface per pixel, the nearest, and the envelope is a little bigger than the splats it stands in for. So where an arm passes in front of a face, the arm's mesh overhangs the face by a centimetre or so, and that strip of face was lit as the arm: by its dim, side-on rim. From close to, the outline of the mesh showed through on whatever was behind it.
+
+`src/relight-depth.js` makes the lookup aware of depth. The proxy writes its distance from the camera into the texture's alpha. Each frame a half-size texture is made from that, holding for every pixel the lighting of the furthest mesh surface within 2 cm on screen: what is behind an overhang, carried in under it. A third texture is the first again with its depth negated wherever the second found something further off. A splat fragment reads that one, and only where the pixel is marked does it read the second and take whichever was lit at a depth closer to its own. It costs about 1.5 to 2 ms a frame. The same texture carries lighting out past the edge of the mesh, so the envelope is grown by only 0.4 cm.
 
 ### The mesh
 
@@ -27,7 +33,7 @@ A capture of a person is a thin, hollow shell of splats, and it has real opening
 
 The surface is one closed piece with no open edges, 78,535 vertices, sitting about 1 cm from the nearest opaque splat centre (`tools/proxy-girth.mjs` measures this).
 
-The envelope is the same solid with its hollows filled in: every crease and overhang narrower than 4 cm is bridged, the way cling film would lie over the figure, and it is meshed at half the resolution (18,860 vertices). Its normals come from a smoother field still. It exists because lighting is taken from the nearest mesh surface in front of each pixel, and should follow the broad form of a head or a limb. On the real surface, a fringe of hair hangs over the forehead and a brow over the eye, and the normal swings round at each such rim. Grown by 1.2 cm, the envelope leaves at most 0.06% of the pixels the splats cover without lighting, in any of six views.
+The envelope is the same solid with its hollows filled in: every crease and overhang narrower than 4 cm is bridged, the way cling film would lie over the figure, and it is meshed at half the resolution (18,860 vertices). Its normals come from a smoother field still. It exists because lighting is taken from the nearest mesh surface in front of each pixel, and should follow the broad form of a head or a limb. On the real surface, a fringe of hair hangs over the forehead and a brow over the eye, and the normal swings round at each such rim. With the lighting carried out past its edge (see above), at most 0.2% of the pixels the splats cover are left without lighting, in any of six views.
 
 Light also wraps a little way round the far side of the figures (`wrapLight` in `src/shadow-caster.js`). The torch is held beside the lens, not on it, so wherever one part of a figure overlaps another, the camera sees a sliver of the nearer part that has already turned away from the torch. With plain diffuse lighting and nothing to fill it, that sliver is black: a line along a fringe, a patch beside a nose. Skin, hair and cloth scatter light, so on them the edge of the light is soft.
 

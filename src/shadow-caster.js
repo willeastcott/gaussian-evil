@@ -9,10 +9,10 @@
 // forehead, or a brow over an eye, draws its own hard edge and thin shadow across the skin
 // behind it. The envelope has nothing that small to do it with.
 //
-// A splat also reaches a little past the surface it sits on, so at a silhouette some of its
-// pixels would find no mesh behind them and go dark. The envelope is therefore grown outwards
-// along its normals by about a centimetre before it is used. It casts nothing: a limb that much
-// too thick would throw a shadow that much too wide.
+// A splat also reaches a little past the surface it sits on, so the envelope is grown outwards
+// along its normals by a few millimetres before it is used (src/relight-depth.js carries the
+// lighting the rest of the way). It casts nothing: a limb that is too thick throws a shadow that
+// is too wide.
 import * as pc from 'playcanvas';
 
 /**

@@ -17,6 +17,7 @@ import { createGround } from './ground.js';
 import { createLightning } from './lightning.js';
 import { createPost } from './post.js';
 import { createRain } from './rain.js';
+import { createDepthAwareRelighting } from './relight-depth.js';
 import { createSplashes } from './splash.js';
 import { createCasterEntity, createGrownMesh, wrapLight } from './shadow-caster.js';
 import { createWetFloor } from './wet-floor.js';
@@ -31,7 +32,7 @@ const PLY_CENTRE = [0.5, -1.0];        // x, z of the middle of the pair
 const CAMERA_MIN_HEIGHT = 0.12;        // metres: the camera stays this far above the ground
 const PITCH_DOWN = -80, PITCH_UP = 10; // degrees the orbit may look down and up
 const PROXY_WRAP = 0.3;                // how far light reaches round the far side of the figures (src/shadow-caster.js)
-const RECEIVER_GROW = 0.012;           // metres the mesh that receives light is grown beyond the baked envelope
+const RECEIVER_GROW = 0.004;           // metres the mesh that receives light is grown beyond the baked envelope
 
 // head centres in PLY space (tools/find-heads.mjs), the direction each close-up is shot from, and
 // where the torch is held (right, up, forward of the camera, at full reach). She aims a pistol
@@ -142,6 +143,8 @@ const proxyMaterial = new pc.StandardMaterial();
 proxyMaterial.diffuse = new pc.Color(1, 1, 1);
 wrapLight(proxyMaterial, PROXY_WRAP);
 relighting.configureMaterial(proxyMaterial);
+// each splat takes its light from the mesh surface at its own depth (src/relight-depth.js)
+const relightDepth = createDepthAwareRelighting({ app, camera, relighting, proxyMaterial });
 
 // the bake holds two meshes (tools/bake-proxy.mjs). 'surface' is the figures' real surface, and
 // casts the shadows. 'envelope' is the same shape with its small hollows and overhangs smoothed
@@ -314,5 +317,5 @@ if (query.has('debug')) {
 document.getElementById('loading').classList.add('done');
 
 if (import.meta.env.DEV) {
-    window.__sr = { pc, app, device, camera, controls, relighting, torch, stage, splat, proxy, caster, ground, state, views, setView, setRelighting, toWorld, wet, rain, splashes, lightning, sound, post, setPost };
+    window.__sr = { pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, views, setView, setRelighting, toWorld, wet, rain, splashes, lightning, sound, post, setPost };
 }

@@ -237,7 +237,7 @@ fn postHash(p: vec2f) -> f32 {
 `;
 
 // a full-screen pass: a fragment shader, and a function that gives it its inputs when it runs
-class QuadPass extends pc.RenderPassShaderQuad {
+export class QuadPass extends pc.RenderPassShaderQuad {
     constructor(device, name, fragmentGLSL, fragmentWGSL, feed) {
         super(device);
         this.shader = pc.ShaderUtils.createShader(device, {
