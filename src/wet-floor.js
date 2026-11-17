@@ -109,10 +109,9 @@ fn modifySplatColor(center: vec3f, color: ptr<function, vec4f>) {
  * @param {pc.Entity} o.stage - Parent of the capture, in PLY space.
  * @param {number} o.plyFloorY - Height of the floor in PLY space.
  * @param {pc.Asset} o.mirrorAsset - The mirrored splat.
- * @param {pc.Asset} o.proxyAsset - The proxy mesh container.
  * @param {pc.Material} o.proxyMaterial - Material of the proxy mesh.
- * @param {pc.Mesh} o.receiverMesh - The grown copy of the baked mesh, which receives light.
- * @param {pc.Mesh} o.casterMesh - The baked mesh, which casts the shadows.
+ * @param {pc.Mesh} o.receiverMesh - The baked envelope, grown: the mesh that receives light.
+ * @param {pc.Mesh} o.casterMesh - The baked surface, which casts the shadows.
  * @param {pc.Entity} o.camera - Main camera, carrying the relighting script.
  * @param {pc.Layer} o.relightLayer - Layer of the real proxy mesh.
  * @param {pc.Layer} o.reflectionLayer - Layer drawn before the ground, for the reflected figures.
@@ -120,7 +119,7 @@ fn modifySplatColor(center: vec3f, color: ptr<function, vec4f>) {
  * @param {pc.Vec3} o.aim - Point the real torch is aimed at, updated by the caller.
  * @returns {object} Settings and the entities made.
  */
-export function createWetFloor({ app, stage, plyFloorY, mirrorAsset, proxyAsset, proxyMaterial, receiverMesh, casterMesh, camera, relightLayer, reflectionLayer, torch, aim }) {
+export function createWetFloor({ app, stage, plyFloorY, mirrorAsset, proxyMaterial, receiverMesh, casterMesh, camera, relightLayer, reflectionLayer, torch, aim }) {
     const settings = {
         reflectivity: 1,
         fadeDepth: 1.6,     // metres below the surface at which the reflection has faded to 1/e
@@ -140,14 +139,12 @@ export function createWetFloor({ app, stage, plyFloorY, mirrorAsset, proxyAsset,
     app.scene.layers.push(mirrorLayer);
     camera.findByName('RelightingCamera').camera.layers = [relightLayer.id, mirrorLayer.id];
 
-    const mirrorProxy = proxyAsset.resource.instantiateRenderEntity();
-    mirrorProxy.findComponents('render').forEach((render) => {
-        render.layers = [mirrorLayer.id];
-        render.castShadows = false;
-        render.meshInstances.forEach((mi) => {
-            mi.mesh = receiverMesh;
-            mi.material = proxyMaterial;
-        });
+    const mirrorProxy = new pc.Entity('proxy-mirror');
+    mirrorProxy.addComponent('render', {
+        meshInstances: [new pc.MeshInstance(receiverMesh, proxyMaterial)],
+        layers: [mirrorLayer.id],
+        castShadows: false,
+        receiveShadows: true
     });
     mirrorProxy.setLocalScale(1, -1, 1);
     mirrorProxy.setLocalPosition(0, 2 * plyFloorY, 0);

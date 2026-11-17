@@ -1,20 +1,23 @@
-// The two meshes the lighting needs, both from the one baked proxy.
+// The two meshes the lighting needs, both from the one bake (tools/bake-proxy.mjs).
 //
-// The baked mesh (tools/bake-proxy.mjs) is the figures' real surface: closed, solid, and within a
-// centimetre of the splats. That is the right mesh for blocking light, so it casts the shadows.
-// It lives on a layer no camera draws, which the lights still reach, so it gets into the shadow
-// maps and nothing else.
+// 'surface' is the figures' real surface: closed, solid, and within a centimetre of the splats.
+// That is the right mesh for blocking light, so it casts the shadows. It lives on a layer no
+// camera draws, which the lights still reach, so it gets into the shadow maps and nothing else.
 //
-// It is not quite the right mesh for receiving light. The lighting is looked up per pixel, and a
-// splat reaches a little past the surface it sits on, so at a silhouette some of a splat's pixels
-// would find no mesh behind them and go dark. The mesh that receives light is therefore a copy
-// grown outwards along its normals by about a centimetre. It casts nothing: a limb that much too
-// thick would throw a shadow that much too wide, which shows as a dark band along its edge.
+// 'envelope' is that surface with its small hollows and overhangs smoothed over. The lighting is
+// looked up per pixel from the nearest mesh in front, and on the real surface a fringe over a
+// forehead, or a brow over an eye, draws its own hard edge and thin shadow across the skin
+// behind it. The envelope has nothing that small to do it with.
+//
+// A splat also reaches a little past the surface it sits on, so at a silhouette some of its
+// pixels would find no mesh behind them and go dark. The envelope is therefore grown outwards
+// along its normals by about a centimetre before it is used. It casts nothing: a limb that much
+// too thick would throw a shadow that much too wide.
 import * as pc from 'playcanvas';
 
 /**
  * @param {pc.GraphicsDevice} device - The device.
- * @param {pc.Mesh} source - The baked mesh.
+ * @param {pc.Mesh} source - The baked envelope.
  * @param {number} grow - How far to push the surface out, in the mesh's own units.
  * @returns {pc.Mesh} The grown mesh, with the same normals.
  */
@@ -36,7 +39,7 @@ export function createGrownMesh(device, source, grow) {
 }
 
 /**
- * @param {pc.Mesh} mesh - The baked mesh.
+ * @param {pc.Mesh} mesh - The baked surface.
  * @param {pc.Material} material - Any material; only its shadow pass is ever drawn.
  * @param {number[]} layers - Ids of the layers to put it on.
  * @returns {pc.Entity} An entity that casts the mesh's shadow.

@@ -8,13 +8,13 @@ Move the pointer to aim the torch, drag to orbit, scroll to zoom. Space (or the 
 
 Splats carry their capture lighting baked in, and have no usable normals of their own. So the lighting comes from a stand-in:
 
-1. `tools/bake-proxy.mjs` builds a closed, solid mesh of the figures' real surface from the splats (`public/proxy.glb`).
+1. `tools/bake-proxy.mjs` builds two closed, solid meshes of the figures from the splats (`public/proxy.glb`): their real surface, and a smooth envelope of it.
 2. At run time the engine's `GSplatRelighting` script renders that mesh, lit by ordinary lights with shadow maps, into an offscreen texture.
 3. Every splat fragment is multiplied by the lighting at its own pixel.
 
 The torch is a shadow-casting spot light. It lights the proxy mesh and the floor.
 
-The baked mesh casts the shadows, on the figures and on the ground. The mesh that receives light is a copy of it grown outwards by 1.2 cm (`src/shadow-caster.js`): lighting is looked up per pixel, and a splat reaches a little past the surface it sits on, so without the margin a few pixels at each silhouette would find no mesh behind them. The grown copy casts nothing, because a limb that much too thick throws a shadow that much too wide.
+The two meshes have different jobs (`src/shadow-caster.js`). The real surface casts the shadows, on the figures and on the ground. The envelope receives the light, grown outwards by 1.2 cm first: lighting is looked up per pixel, and a splat reaches a little past the surface it sits on, so without the margin a few pixels at each silhouette would find no mesh behind them. The envelope casts nothing, because a limb that much too thick throws a shadow that much too wide.
 
 ### The mesh
 
@@ -25,7 +25,11 @@ A capture of a person is a thin, hollow shell of splats, and it has real opening
 3. The outside is found by line of sight: a voxel is outside if it can be seen from somewhere in the sky, from the horizon to straight overhead. Everything else is the body. Flooding in from the edges of the grid is not enough, because it finds the openings and hollows the body out.
 4. The solid is smoothed and turned into a mesh with surface nets, with normals from the gradient of the solid, so they always point outwards.
 
-The result is one closed piece with no open edges, 78,535 vertices and 3.8 MB, sitting about 1 cm from the nearest opaque splat centre (`tools/proxy-girth.mjs` measures this). Drawn on its own, it covers 99.4% to 99.95% of the pixels the splats cover, depending on the view; the grown copy covers all of them.
+The surface is one closed piece with no open edges, 78,535 vertices, sitting about 1 cm from the nearest opaque splat centre (`tools/proxy-girth.mjs` measures this).
+
+The envelope is the same solid with its hollows filled in: every crease and overhang narrower than 4 cm is bridged, the way cling film would lie over the figure, and it is meshed at half the resolution (18,860 vertices). It exists because lighting is taken from the nearest mesh surface in front of each pixel. On the real surface, a fringe of hair hangs over the forehead and a brow over the eye, and each such overhang drew a hard dark line across the skin behind it. Real hair does not: it is a few strands, not a slab. The envelope has no small overhangs, and the shadows that matter, such as an arm across a chest, still come from the true shape. Grown by 1.2 cm, it leaves at most 0.06% of the pixels the splats cover without lighting, in any of six views.
+
+Both meshes are in one 4.7 MB file.
 
 ### The ground
 
@@ -74,7 +78,7 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the mesh that receives light over the splats, `?proxy=2` to draw the baked mesh that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off.
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off.
 
 ## Rebuild the data
 
@@ -88,7 +92,7 @@ npx splat-transform -w raw/mirror.ply --decimate 35% raw/mirror-dec.ply
 npx splat-transform -w raw/mirror-dec.ply public/mirror.sog
 ```
 
-`npm run bake` takes `VOXEL`, `OCCUPIED`, `CLOSE`, `VIEWS`, `SMOOTH`, `FLOOR` and `MIN_ISLAND` environment variables; see the top of the tool. It prints each figure's volume, which shows at once whether a body came out solid, and `SLICE=0.7` prints a plan of the solid cut at that fraction of the height.
+`npm run bake` takes `VOXEL`, `OCCUPIED`, `CLOSE`, `VIEWS`, `SMOOTH`, `ENVELOPE`, `FLOOR` and `MIN_ISLAND` environment variables; see the top of the tool. It prints each figure's volume, which shows at once whether a body came out solid, and `SLICE=0.7` prints a plan of the solid cut at that fraction of the height.
 
 ## Credit
 
