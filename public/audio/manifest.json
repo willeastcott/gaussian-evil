@@ -1,0 +1,14 @@
+{
+  "beds": {
+    "rain-asphalt": 21.75,
+    "rain-puddles": 21.75,
+    "rain-wash": 21.75
+  },
+  "thunder": {
+    "thunder-near-a": 8.588,
+    "thunder-near-b": 10,
+    "thunder-mid-a": 9.919,
+    "thunder-mid-b": 8.93,
+    "thunder-far-a": 9.825
+  }
+}

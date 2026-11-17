@@ -1,0 +1,21 @@
+{
+  "name": "splat-resident-evil",
+  "version": "0.1.0",
+  "description": "Prototype: a Gaussian splat capture of two people, relit in real time by a hand-held torch. Built with PlayCanvas.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bake": "node --max-old-space-size=4096 tools/bake-proxy.mjs raw/scene.ply public/proxy.glb",
+    "audio": "node tools/build-audio.mjs"
+  },
+  "dependencies": {
+    "playcanvas": "^2.24.0"
+  },
+  "devDependencies": {
+    "@playcanvas/splat-transform": "^3.11.1",
+    "vite": "^8.3.8"
+  }
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Splat Resident Evil · a torch for Gaussian splats</title>
+    <meta name="description" content="A Gaussian splat capture of two people, relit in real time by a hand-held torch. Built with PlayCanvas.">
+    <meta name="theme-color" content="#000000">
+    <style>
+        :root { color-scheme: dark; --ink: #e8e6e1; }
+        html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); -webkit-user-select: none; user-select: none; }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+        #bar { position: fixed; left: 12px; top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+        button { font: inherit; color: var(--ink); background: rgba(20, 20, 22, 0.72); border: 1px solid rgba(232, 230, 225, 0.22); border-radius: 6px; padding: 6px 10px; cursor: pointer; touch-action: manipulation; }
+        button:hover { border-color: rgba(232, 230, 225, 0.55); }
+        button[aria-pressed="true"] { background: rgba(232, 230, 225, 0.9); color: #111; }
+        #hint, #credit { position: fixed; left: 12px; right: 12px; pointer-events: none; opacity: 0.6; text-shadow: 0 1px 4px #000; }
+        #hint { bottom: 30px; }
+        #credit { bottom: 10px; font-size: 11px; }
+        #credit a { color: inherit; pointer-events: auto; }
+        #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #000; transition: opacity 0.6s; }
+        #loading.done { opacity: 0; pointer-events: none; }
+        #stats { position: fixed; right: 12px; top: 12px; opacity: 0.6; font-variant-numeric: tabular-nums; text-align: right; white-space: pre; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <canvas id="app"></canvas>
+    <div id="bar">
+        <button id="relight" aria-pressed="true">Relighting</button>
+        <button data-view="wide">Wide</button>
+        <button data-view="him">His face</button>
+        <button data-view="her">Her face</button>
+        <button id="sound" aria-pressed="false">Sound</button>
+    </div>
+    <div id="stats"></div>
+    <div id="hint">Move the pointer to aim the torch · drag to orbit · scroll to zoom · L for lightning</div>
+    <div id="credit">Capture: <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">Adrian Cuesta, Dymensium</a> (CC BY 4.0) · relit in real time with PlayCanvas</div>
+    <div id="loading">Loading…</div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
