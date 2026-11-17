@@ -3,7 +3,7 @@
 // space (metres), so neighbouring splats always move together and nothing can tear:
 //
 //   - weight shifting: each figure leans a few millimetres about its feet
-//   - breathing: the chest swells and the shoulders rise
+//   - breathing: the ribs swell, and the shoulders, neck and head ride up on them as one piece
 //   - wind: the hem of her dress and the hair down her back ripple in gusts
 //
 // The fields are placed from tools/body-profile.mjs, which measures where each figure is at each
@@ -40,9 +40,15 @@ vec3 lifeOffset(vec3 p, float t) {
     float breath = 0.5 + 0.5 * sin(t * mix(2.0, 2.4, her) + her * 1.7);
     breath = breath * breath * (3.0 - 2.0 * breath);
     vec3 r = p - chest;
-    float swell = exp(-dot(r, r) / (2.0 * 0.17 * 0.17));
+    // the ribs swell outwards, between the waist and the collarbone and no higher: a swell that
+    // reached the head made it grow and shrink with every breath
+    float ribs = smoothstep(-0.30, -0.10, r.y) * (1.0 - smoothstep(0.04, 0.14, r.y));
+    float swell = ribs * exp(-dot(r.xz, r.xz) / (2.0 * 0.17 * 0.17));
     d.xz += normalize(r.xz + vec2(1.0e-4)) * (0.006 * swell * breath);
-    float lift = smoothstep(chest.y - 0.2, chest.y + 0.1, p.y) * exp(-dot(r.xz, r.xz) / (2.0 * 0.3 * 0.3));
+    // everything above the waist rides up. Within a hand's breadth of the spine it all rises by
+    // the same amount, so the neck and head move as one piece; the arms, further out, rise less
+    float outside = max(0.0, length(r.xz) - 0.2);
+    float lift = smoothstep(-0.2, 0.1, r.y) * exp(-outside * outside / (2.0 * 0.3 * 0.3));
     d.y += 0.004 * lift * breath;
 
     // wind, in gusts
@@ -84,11 +90,17 @@ fn lifeOffset(p: vec3f, t: f32) -> vec3f {
     var breath = 0.5 + 0.5 * sin(t * mix(2.0, 2.4, her) + her * 1.7);
     breath = breath * breath * (3.0 - 2.0 * breath);
     let r = p - chest;
-    let swell = exp(-dot(r, r) / (2.0 * 0.17 * 0.17));
-    let out2 = normalize(r.xz + vec2f(1.0e-4)) * (0.006 * swell * breath);
-    d.x += out2.x;
-    d.z += out2.y;
-    let lift = smoothstep(chest.y - 0.2, chest.y + 0.1, p.y) * exp(-dot(r.xz, r.xz) / (2.0 * 0.3 * 0.3));
+    // the ribs swell outwards, between the waist and the collarbone and no higher: a swell that
+    // reached the head made it grow and shrink with every breath
+    let ribs = smoothstep(-0.30, -0.10, r.y) * (1.0 - smoothstep(0.04, 0.14, r.y));
+    let swell = ribs * exp(-dot(r.xz, r.xz) / (2.0 * 0.17 * 0.17));
+    let push = normalize(r.xz + vec2f(1.0e-4)) * (0.006 * swell * breath);
+    d.x += push.x;
+    d.z += push.y;
+    // everything above the waist rides up. Within a hand's breadth of the spine it all rises by
+    // the same amount, so the neck and head move as one piece; the arms, further out, rise less
+    let outside = max(0.0, length(r.xz) - 0.2);
+    let lift = smoothstep(-0.2, 0.1, r.y) * exp(-outside * outside / (2.0 * 0.3 * 0.3));
     d.y += 0.004 * lift * breath;
 
     // wind, in gusts

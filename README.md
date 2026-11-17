@@ -51,7 +51,7 @@ Three layers are drawn in order: the reflected figures, then the ground over the
 
 ### Time runs
 
-Rain falls, so the figures cannot be statues. `src/life.js` gives them small motions without a rig: each is a smooth displacement field in world space (a lean about the feet, a swelling chest, wind in the hem of her dress and the hair down her back), applied in the same vertex hook, and mirrored for the reflections. The fields are placed from `tools/body-profile.mjs`. The lighting proxy does not move, so the amplitudes stay around a centimetre.
+Rain falls, so the figures cannot be statues. `src/life.js` gives them small motions without a rig: each is a smooth displacement field in world space (a lean about the feet, breathing, wind in the hem of her dress and the hair down her back), applied in the same vertex hook, and mirrored for the reflections. Breathing swells the ribs only, between the waist and the collarbone; the shoulders, neck and head ride up on them as one piece, so a face in close-up rises and falls by 4 mm but does not change shape. The fields are placed from `tools/body-profile.mjs`. The lighting proxy does not move, so the amplitudes stay around a centimetre.
 
 The rain (`src/rain.js`) is one mesh of thin quads rather than splats, lit in its vertex shader against the torch cone, so only the beam shows it.
 
