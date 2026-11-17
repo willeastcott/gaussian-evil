@@ -137,7 +137,7 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
                 g.shadowBlur = 12 * u;
                 g.fillStyle = 'rgba(232, 230, 225, 0.82)';
                 g.font = `${30 * u}px "Courier New", Courier, monospace`;
-                g.fillText('A homage to the greatest horror game of all time. Built on PlayCanvas.', W / 2, H - 112 * u, W * 0.94);
+                g.fillText('A homage to the greatest horror game of all time. Made with PlayCanvas.', W / 2, H - 112 * u, W * 0.94);
                 g.fillStyle = 'rgba(232, 230, 225, 0.5)';
                 g.font = `${20 * u}px "Courier New", Courier, monospace`;
                 g.letterSpacing = `${1.2 * u}px`;
