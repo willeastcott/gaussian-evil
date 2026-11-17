@@ -18,7 +18,7 @@ import { createLightning } from './lightning.js';
 import { createPost } from './post.js';
 import { createRain } from './rain.js';
 import { createSplashes } from './splash.js';
-import { createCasterEntity, createGrownMesh } from './shadow-caster.js';
+import { createCasterEntity, createGrownMesh, wrapLight } from './shadow-caster.js';
 import { createWetFloor } from './wet-floor.js';
 
 const query = new URLSearchParams(location.search);
@@ -30,6 +30,7 @@ const PLY_FLOOR_Y = 0.094;
 const PLY_CENTRE = [0.5, -1.0];        // x, z of the middle of the pair
 const CAMERA_MIN_HEIGHT = 0.12;        // metres: the camera stays this far above the ground
 const PITCH_DOWN = -80, PITCH_UP = 10; // degrees the orbit may look down and up
+const PROXY_WRAP = 0.3;                // how far light reaches round the far side of the figures (src/shadow-caster.js)
 const RECEIVER_GROW = 0.012;           // metres the mesh that receives light is grown beyond the baked envelope
 
 // head centres in PLY space (tools/find-heads.mjs), the direction each close-up is shot from, and
@@ -139,7 +140,7 @@ const relightLayer = relighting.layer;
 
 const proxyMaterial = new pc.StandardMaterial();
 proxyMaterial.diffuse = new pc.Color(1, 1, 1);
-proxyMaterial.update();
+wrapLight(proxyMaterial, PROXY_WRAP);
 relighting.configureMaterial(proxyMaterial);
 
 // the bake holds two meshes (tools/bake-proxy.mjs). 'surface' is the figures' real surface, and

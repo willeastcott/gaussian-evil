@@ -39,6 +39,34 @@ export function createGrownMesh(device, source, grow) {
 }
 
 /**
+ * Lets light reach a little way round the far side of the material's surfaces.
+ *
+ * Plain diffuse lighting stops dead where a surface turns side-on to the light. The torch is held
+ * beside the lens, not on it, so wherever one part of a figure overlaps another, the camera sees
+ * a sliver of the nearer part that has already turned away from the torch, and with nothing to
+ * fill it that sliver is black: a line along a fringe, a patch beside a nose. Skin, hair and
+ * cloth do not light like that. Light scatters through them, so the edge of the light is soft.
+ *
+ * @param {pc.StandardMaterial} material - The proxy's material.
+ * @param {number} wrap - 0 is plain diffuse lighting; at 1 light reaches all the way round.
+ */
+export function wrapLight(material, wrap) {
+    const w = wrap.toFixed(3), d = (1 + wrap).toFixed(3);
+    material.shaderChunksVersion = '2.24';
+    material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set('lightDiffuseLambertPS', `
+float getLightDiffuse(vec3 worldNormal, vec3 viewDir, vec3 lightDirNorm) {
+    return max((dot(worldNormal, -lightDirNorm) + ${w}) / ${d}, 0.0);
+}
+`);
+    material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set('lightDiffuseLambertPS', `
+fn getLightDiffuse(worldNormal: vec3f, viewDir: vec3f, lightDirNorm: vec3f) -> f32 {
+    return max((dot(worldNormal, -lightDirNorm) + ${w}) / ${d}, 0.0);
+}
+`);
+    material.update();
+}
+
+/**
  * @param {pc.Mesh} mesh - The baked surface.
  * @param {pc.Material} material - Any material; only its shadow pass is ever drawn.
  * @param {number[]} layers - Ids of the layers to put it on.

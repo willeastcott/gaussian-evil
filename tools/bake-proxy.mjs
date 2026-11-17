@@ -28,7 +28,9 @@
 //      is the 'surface' mesh
 //   5. the 'envelope' mesh is the same solid with its hollows filled in: every crease and
 //      overhang narrower than a few centimetres is bridged, the way cling film would lie over the
-//      figure. It is smoother, so it is meshed at half the resolution again
+//      figure. It is smoother, so it is meshed at half the resolution again. Its normals come
+//      from a smoother field still: light should follow the broad form of a head or a limb, and
+//      a normal that swings round at the rim of a fringe draws that rim as a dark line
 //
 // Why two. Lighting is looked up per pixel from the nearest mesh surface. On the real surface a
 // fringe of hair hangs over the forehead and a brow over the eye, and each such overhang puts a
@@ -46,7 +48,8 @@
 // is grown by to close gaps, default 2), VIEWS (directions the outside is looked for from, default
 // 64), SMOOTH (smoothing passes, default 2), FLOOR (the floor's
 // height in PLY units, default 0.094; y points down), ENVELOPE (voxels: the envelope bridges
-// hollows up to twice this wide, default 4), MIN_ISLAND (drop pieces with fewer vertices, default
+// hollows up to twice this wide, default 4), SOFTEN (smoothing passes on the field the envelope's
+// normals come from, default 6), MIN_ISLAND (drop pieces with fewer vertices, default
 // 400)
 import fs from 'node:fs';
 
@@ -62,6 +65,7 @@ const views = Number(process.env.VIEWS ?? 64);
 const smooth = Number(process.env.SMOOTH ?? 2);
 const floorY = Number(process.env.FLOOR ?? 0.094);
 const wrap = Number(process.env.ENVELOPE ?? 4);
+const soften = Number(process.env.SOFTEN ?? 6);
 const minIsland = Number(process.env.MIN_ISLAND ?? 400);
 const UNITS_TO_CM = 7.2;        // the stage scale in src/main.js
 
@@ -273,9 +277,11 @@ if (process.env.SLICE) {
  * @param {number} passes - Smoothing passes on the fine grid.
  * @param {number} by - Fine voxels to the side of one voxel of the mesh's grid: 2 or 4.
  * @param {string} name - For the report.
+ * @param {number} soften - Smoothing passes, on the mesh's own grid, of the field the normals are
+ * taken from. The shape is not affected.
  * @returns {object} Positions, normals, indices and bounds.
  */
-function meshOf(body, passes, by, name) {
+function meshOf(body, passes, by, name, soften = 0) {
     let field = new Float32Array(total);
     for (let v = 0; v < total; v++) field[v] = body[v];
     for (let pass = 0; pass < passes; pass++) {
@@ -295,6 +301,15 @@ function meshOf(body, passes, by, name) {
         }
         G[x + cnx * y + csxy * z] = sum / (by * by * by);
     }
+    // normals may come from a smoother field than the shape does
+    let Gn = G;
+    for (let pass = 0; pass < soften; pass++) {
+        for (const st of [1, cnx, csxy]) {
+            const T = new Float32Array(Gn.length);
+            for (let i = st; i < Gn.length - st; i++) T[i] = 0.25 * Gn[i - st] + 0.5 * Gn[i] + 0.25 * Gn[i + st];
+            Gn = T;
+        }
+    }
     // a coarse voxel's value sits at its centre
     const c0 = g0.map(v => v + H / 2);
     const sample = (x, y, z) => {
@@ -302,8 +317,8 @@ function meshOf(body, passes, by, name) {
         if (fx < 0 || fy < 0 || fz < 0 || fx >= cnx - 1 || fy >= cny - 1 || fz >= cnz - 1) return 0;
         const ix = fx | 0, iy = fy | 0, iz = fz | 0, tx = fx - ix, ty = fy - iy, tz = fz - iz;
         const i = ix + cnx * iy + csxy * iz;
-        const a = G[i] + (G[i + 1] - G[i]) * tx, b = G[i + cnx] + (G[i + cnx + 1] - G[i + cnx]) * tx;
-        const c = G[i + csxy] + (G[i + csxy + 1] - G[i + csxy]) * tx, d = G[i + csxy + cnx] + (G[i + csxy + cnx + 1] - G[i + csxy + cnx]) * tx;
+        const a = Gn[i] + (Gn[i + 1] - Gn[i]) * tx, b = Gn[i + cnx] + (Gn[i + cnx + 1] - Gn[i + cnx]) * tx;
+        const c = Gn[i + csxy] + (Gn[i + csxy + 1] - Gn[i + csxy]) * tx, d = Gn[i + csxy + cnx] + (Gn[i + csxy + cnx + 1] - Gn[i + csxy + cnx]) * tx;
         const e = a + (b - a) * ty, g = c + (d - c) * ty;
         return e + (g - e) * tz;
     };
@@ -399,7 +414,7 @@ function meshOf(body, passes, by, name) {
 const meshes = [
     meshOf(solid, smooth, 2, 'surface'),
     // the hollows filled in: grown by `wrap` voxels, then shrunk by as many
-    meshOf(morph(morph(solid, wrap, true), wrap, false), smooth + 2, 4, 'envelope')
+    meshOf(morph(morph(solid, wrap, true), wrap, false), smooth + 2, 4, 'envelope', soften)
 ];
 
 // ---- write the GLB ----
