@@ -216,7 +216,7 @@ export function createSoundscape({ app, camera, rain, button }) {
 
     // the first gesture anywhere starts the sound; after that only the button changes it
     const first = (e) => {
-        if (button && button.contains(e.target)) return;
+        if (button && e.target instanceof Node && button.contains(e.target)) return;
         window.removeEventListener('pointerdown', first, true);
         window.removeEventListener('keydown', first, true);
         if (!started) start();

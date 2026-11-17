@@ -2,7 +2,7 @@
 
 A Gaussian splat capture of two people, relit in real time by a hand-held torch. Prototype, built with PlayCanvas.
 
-Move the pointer to aim the torch, drag to orbit, scroll to zoom. Space (or the Relighting button) switches the relighting off to show the capture as shot. Lightning strikes every 7 to 16 seconds; L fires a strike at once. Sound starts with your first click or key press, and the Sound button turns it off.
+Move the pointer to aim the torch, drag to orbit, scroll to zoom. Space (or the Relighting button) switches the relighting off to show the capture as shot. Lightning strikes every 7 to 16 seconds; L fires a strike at once. Sound starts with your first click or key press, and the Sound button turns it off. The Effects button (or P) switches the post effects off and on.
 
 ## How it works
 
@@ -61,7 +61,7 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the proxy mesh over the splats, `?proxy=2` to draw the slimmer shadow caster, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` for no post effects.
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the proxy mesh over the splats, `?proxy=2` to draw the slimmer shadow caster, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off.
 
 ## Rebuild the data
 

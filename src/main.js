@@ -256,7 +256,15 @@ const sound = query.get('sound') === '0' ? null : createSoundscape({ app, camera
 if (!sound) soundButton.hidden = true;
 
 // ---- post effects: glow, vignette and grain over the finished picture ----
-const post = query.get('post') === '0' ? null : createPost({ app, camera });
+// (the Effects button or P switches them off and on; ?post=0 starts with them off)
+const post = createPost({ app, camera });
+const postButton = document.getElementById('post');
+const setPost = (on) => {
+    post.setEnabled(on);
+    postButton.setAttribute('aria-pressed', String(on));
+};
+setPost(query.get('post') !== '0');
+postButton.addEventListener('click', () => setPost(!post.enabled));
 
 // ---- views ----
 const views = { wide: WIDE };
@@ -282,6 +290,7 @@ relightButton.addEventListener('click', () => setRelighting(!relighting.enabled)
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') setRelighting(!relighting.enabled);
     if (e.code === 'KeyL' && lightning) lightning.strike();
+    if (e.code === 'KeyP') setPost(!post.enabled);
 });
 
 if (query.has('debug')) {
@@ -300,5 +309,5 @@ if (query.has('debug')) {
 document.getElementById('loading').classList.add('done');
 
 if (import.meta.env.DEV) {
-    window.__sr = { pc, app, device, camera, controls, relighting, torch, stage, splat, proxy, caster, ground, state, views, setView, setRelighting, toWorld, wet, rain, splashes, lightning, sound, post };
+    window.__sr = { pc, app, device, camera, controls, relighting, torch, stage, splat, proxy, caster, ground, state, views, setView, setRelighting, toWorld, wet, rain, splashes, lightning, sound, post, setPost };
 }

@@ -217,7 +217,7 @@ class QuadPass extends pc.RenderPassShaderQuad {
  * @param {object} o - What the effects are applied to.
  * @param {pc.AppBase} o.app - The app.
  * @param {pc.Entity} o.camera - Main camera: from now on it draws into a texture.
- * @returns {object} Settings and the pieces made.
+ * @returns {object} Settings, setEnabled(on) and the pieces made.
  */
 export function createPost({ app, camera }) {
     const settings = {
@@ -303,5 +303,13 @@ export function createPost({ app, camera }) {
     app.root.addChild(finisher);
     finisher.camera.framePasses = passes;
 
-    return { settings, scene, sceneTarget, passes, finisher };
+    // off: the camera draws straight to the screen again, and the passes do not run
+    let enabled = true;
+    const setEnabled = (on) => {
+        enabled = on;
+        camera.camera.renderTarget = on ? sceneTarget : null;
+        finisher.enabled = on;
+    };
+
+    return { settings, scene, sceneTarget, passes, finisher, setEnabled, get enabled() { return enabled; } };
 }
