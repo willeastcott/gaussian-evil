@@ -23,8 +23,13 @@
         #title.gone { opacity: 0; pointer-events: none; }
         #title .card { animation: rise 1.8s ease 0.15s both; }
         @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-        #title h1 { margin: 0; font-weight: 300; font-size: clamp(19px, 4.4vw, 46px); line-height: 1.25; letter-spacing: 0.34em; text-indent: 0.34em; text-transform: uppercase; }
-        #title .lede { margin: 20px 0 46px; font: italic 400 clamp(14px, 1.6vw, 18px)/1.6 Georgia, "Times New Roman", serif; color: var(--dim); }
+        /* the title: tall, condensed capitals in a chalky white, cracked and chipped (the #worn
+           filter at the foot of the page), the first letter of each word red. Fonts
+           every device already has: nothing to fetch or license */
+        .wordmark { font-family: Impact, Haettenschweiler, "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif; font-weight: 700; font-stretch: condensed; text-transform: uppercase; color: #ebe8e2; }
+        .wordmark i { font-style: normal; color: #c8141b; }
+        #title h1 { margin: 0; font-weight: 400; font-size: clamp(40px, 10vw, 104px); line-height: 1; letter-spacing: 0.01em; word-spacing: 0.08em; white-space: nowrap; transform: scaleY(1.3); filter: url(#worn) drop-shadow(0 2px 14px rgba(0, 0, 0, 0.8)); }
+        #title .lede { margin: 34px 0 46px; font: italic 400 clamp(14px, 1.6vw, 18px)/1.6 Georgia, "Times New Roman", serif; color: var(--dim); }
         #gate { display: grid; place-items: center; height: 46px; }
         #gate > * { grid-area: 1 / 1; transition: opacity 0.7s ease; }
         /* (faded out, the bar still lies across the middle of the button: it must not take the click) */
@@ -42,7 +47,7 @@
         .chrome { opacity: 0; transition: opacity 1.4s ease; }
         body[data-phase="live"] .chrome { opacity: 1; }
         #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 18px; top: max(16px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
-        #label b { display: block; font-weight: 400; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--dim); }
+        #label b { display: block; font-weight: 400; font-size: 17px; letter-spacing: 0.04em; opacity: 0.85; }
         #label small { display: block; margin-top: 6px; font-size: 11px; color: var(--faint); }
         body[data-phase="live"] #label a { pointer-events: auto; }
         #hud { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end; padding: 40px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent); pointer-events: none; }
@@ -66,7 +71,7 @@
     <canvas id="app"></canvas>
 
     <div id="label" class="chrome">
-        <b>Gaussian Evil</b>
+        <b class="wordmark"><i>G</i>aussian <i>E</i>vil</b>
         <small>Capture: <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">Adrian Cuesta, Dymensium</a> (CC BY 4.0) · relit live with PlayCanvas</small>
     </div>
 
@@ -96,7 +101,7 @@
 
     <div id="title">
         <div class="card">
-            <h1>Gaussian Evil</h1>
+            <h1 class="wordmark" aria-label="Gaussian Evil"><i>G</i>aussian <i>E</i>vil</h1>
             <p class="lede">Two people, captured in 3D.<br>It is dark, and it is raining.<br>You hold the torch.</p>
             <div id="gate">
                 <div id="progress" role="progressbar" aria-label="Loading"><i></i></div>
@@ -106,6 +111,19 @@
         </div>
         <p class="by">Capture: Adrian Cuesta, Dymensium (CC BY 4.0) · made with PlayCanvas</p>
     </div>
+    <!-- wear for the title: fine cracks run through the letters, and specks are chipped out of them -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+        <filter id="worn" x="-5%" y="-25%" width="110%" height="150%">
+            <!-- cracks: turbulence is zero along wandering lines; keep everything but those lines -->
+            <feTurbulence type="turbulence" baseFrequency="0.009 0.017" numOctaves="1" seed="11"/>
+            <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 110 -0.5" result="cracks"/>
+            <!-- chips -->
+            <feTurbulence type="fractalNoise" baseFrequency="0.3" numOctaves="3" seed="3"/>
+            <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -7 5.6" result="chips"/>
+            <feComposite in="SourceGraphic" in2="cracks" operator="in"/>
+            <feComposite in2="chips" operator="in"/>
+        </filter>
+    </svg>
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
