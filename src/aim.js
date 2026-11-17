@@ -64,7 +64,11 @@ export function createAim({ canvas, camera, start }) {
         touches = Math.max(0, touches - 1);
         if (e.type === 'pointerup' && tap && tap.id === e.pointerId && performance.now() - tap.at < TAP_TIME) {
             place(e);
-            neutral = null;        // the phone, as it is held now, points here
+            // the phone, as it is held now, points here: turning it moves the beam from this spot.
+            // (Without moving `start` as well, the next reading from the phone put the beam
+            // straight back where it had been, and a tap did nothing that could be seen.)
+            start = [user.x, user.y];
+            neutral = null;
         }
         if (touches === 0 || (tap && tap.id === e.pointerId)) tap = null;
     };
