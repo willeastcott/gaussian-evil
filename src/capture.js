@@ -136,10 +136,10 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
                 g.shadowColor = 'rgba(0, 0, 0, 0.9)';
                 g.shadowBlur = 12 * u;
                 g.fillStyle = 'rgba(232, 230, 225, 0.82)';
-                g.font = `italic ${34 * u}px Georgia, "Times New Roman", serif`;
+                g.font = `${30 * u}px "Courier New", Courier, monospace`;
                 g.fillText('A homage to the greatest horror game of all time. Built on PlayCanvas.', W / 2, H - 112 * u, W * 0.94);
                 g.fillStyle = 'rgba(232, 230, 225, 0.5)';
-                g.font = `${21 * u}px "Segoe UI", "Helvetica Neue", sans-serif`;
+                g.font = `${20 * u}px "Courier New", Courier, monospace`;
                 g.letterSpacing = `${1.2 * u}px`;
                 g.fillText('Capture: Adrian Cuesta, Dymensium (CC BY 4.0)   ·   superspl.at/scene/67841e9d', W / 2, H - 58 * u, W * 0.94);
                 g.restore();

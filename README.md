@@ -10,7 +10,7 @@ It opens on a title card. Enter, and the scene plays by itself: darkness and rai
 | Look around | drag | drag |
 | Zoom | scroll | pinch |
 
-Along the bottom: three shots (Both, Him, Her), the film (D), lightning now (L), the capture as it was shot, without the torch (Space), sound, and full screen (F). P switches the post effects off and on. Lightning also strikes by itself every 7 to 16 seconds. Leave it alone for 25 seconds and the camera and the torch drift by themselves; leave it for 35 more and the film plays, until you touch something.
+In the top corner, a button (I) opens a panel that says how it is done. Along the bottom: three shots (Both, Him, Her), the film (D), lightning now (L), the capture as it was shot, without the torch (Space), sound, and full screen (F). P switches the post effects off and on. Lightning also strikes by itself every 7 to 16 seconds. Leave it alone for 25 seconds and the camera and the torch drift by themselves; leave it for 35 more and the film plays, until you touch something.
 
 ## How it works
 

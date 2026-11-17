@@ -87,6 +87,7 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         demoAfter: 35,          // seconds of drifting before the film starts by itself; 0 for never
         demoLead: 1.2,          // seconds of dark between the torch going out and the first shot
         demoDim: 0.5,           // seconds the last of the light takes to go once the torch is out
+        hold: false,            // somebody is reading (the info panel is open): neither the drift nor the film starts
         deaf: false             // nothing the visitor does is heard: set while the film is rendered to a file (src/capture.js)
     };
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -420,7 +421,7 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         else if (phase === 'demo') stepDemo(dt);
         else if (phase === 'idle') stepIdle(dt);
         else if (flight.on) stepGlide(dt);
-        else if (phase === 'live' && settings.idleAfter > 0 && clock - lastActivity > settings.idleAfter && !document.hidden) goIdle();
+        else if (phase === 'live' && settings.idleAfter > 0 && !settings.hold && clock - lastActivity > settings.idleAfter && !document.hidden) goIdle();
 
         if (phase === 'live') {
             // the mouse has gone: take the torch from where it points now

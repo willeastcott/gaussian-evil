@@ -373,6 +373,7 @@ const director = createDirector({
             demoBegan = performance.now();
         }
         if (from === 'demo') showHint('');
+        if (phase !== 'live') setInfo(false);
         // how to hold the torch is said once, when it is first handed over
         if (phase === 'live' && !told && (from === 'opening' || from === 'demo')) {
             told = true;
@@ -396,6 +397,26 @@ canvas.addEventListener('pointermove', (e) => {
 if (query.has('idle')) director.settings.idleAfter = Number(query.get('idle'));
 direct = director.update;
 
+// ---- the panel that says how it is done ----
+const info = $('info');
+function setInfo(open) {
+    if (info.classList.contains('open') === open) return;
+    info.classList.toggle('open', open);
+    info.inert = !open;
+    $('about').setAttribute('aria-expanded', String(open));
+    // nobody who is reading wants the scene to wander off, or the controls to fade
+    director.settings.hold = open;
+    if (open) {
+        info.scrollTop = 0;
+        $('info-close').focus({ preventScroll: true });
+    } else {
+        // (a button that keeps the focus would take the next press of Space for itself)
+        /** @type {HTMLElement} */ (document.activeElement)?.blur();
+    }
+}
+$('about').addEventListener('click', () => setInfo(true));
+$('info-close').addEventListener('click', () => setInfo(false));
+
 // ---- on-screen controls ----
 function setRelighting(on) {
     relighting.enabled = on;
@@ -418,6 +439,10 @@ $('fullscreen').hidden = !document.fullscreenEnabled;
 // a button that keeps the focus would take the next press of Space for itself
 $('hud').addEventListener('click', () => /** @type {HTMLElement} */ (document.activeElement)?.blur());
 window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && info.classList.contains('open')) {
+        setInfo(false);
+        return;
+    }
     if (e.repeat || e.target instanceof HTMLButtonElement) return;
     const phase = director.phase;
     // (the film is worth the whole screen, so F works while it plays)
@@ -427,6 +452,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyL') strikeNear();
     if (e.code === 'KeyP') setPost(!post.enabled);
     if (e.code === 'KeyD') director.watch();
+    if (e.code === 'KeyI') setInfo(!info.classList.contains('open'));
 });
 
 if (query.has('debug')) {

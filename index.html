@@ -10,8 +10,11 @@
     <meta property="og:title" content="Gaussian Evil">
     <meta property="og:description" content="Two people, captured in 3D, in the dark and the rain. You hold the torch.">
     <style>
-        :root { color-scheme: dark; --ink: #e8e6e1; --dim: rgba(232, 230, 225, 0.58); --faint: rgba(232, 230, 225, 0.4); }
-        html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #000; font: 13px/1.4 "Helvetica Neue", "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--ink); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        /* Everything but the title is typewritten: the series saves its games at a typewriter, and
+           types its captions. Courier New is on Windows, macOS and iOS; the rest are what Android
+           and Linux have in its place. Nothing is fetched. */
+        :root { color-scheme: dark; --ink: #e8e6e1; --dim: rgba(232, 230, 225, 0.62); --faint: rgba(232, 230, 225, 0.45); --type: "Courier New", Courier, "Cutive Mono", "Nimbus Mono PS", "Liberation Mono", monospace; }
+        html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #000; font: 13px/1.4 var(--type); color: var(--ink); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
         /* the pointer is the torch: all it needs is a small ring to say where it is */
         canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='5.5' fill='none' stroke='%23fff' stroke-opacity='.5' stroke-width='1.2'/%3E%3C/svg%3E") 12 12, crosshair; }
         /* while the scene plays by itself there is no pointer on it, until the mouse is moved */
@@ -31,7 +34,7 @@
         .wordmark { font-family: Impact, Haettenschweiler, "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif; font-weight: 700; font-stretch: condensed; text-transform: uppercase; color: #ebe8e2; }
         .wordmark i { font-style: normal; color: #c8141b; }
         #title h1 { margin: 0; font-weight: 400; font-size: clamp(40px, 10vw, 104px); line-height: 1; letter-spacing: 0.01em; word-spacing: 0.08em; white-space: nowrap; transform: scaleY(1.3); filter: url(#worn) drop-shadow(0 2px 14px rgba(0, 0, 0, 0.8)); }
-        #title .lede { margin: 34px 0 46px; font: italic 400 clamp(14px, 1.6vw, 18px)/1.6 Georgia, "Times New Roman", serif; color: var(--dim); }
+        #title .lede { margin: 34px 0 46px; font: 400 clamp(13px, 1.5vw, 17px)/1.7 var(--type); color: rgba(232, 230, 225, 0.74); }
         #gate { display: grid; place-items: center; height: 46px; }
         #gate > * { grid-area: 1 / 1; transition: opacity 0.7s ease; }
         /* (faded out, the bar still lies across the middle of the button: it must not take the click) */
@@ -48,7 +51,7 @@
         /* ---- on screen once the torch is yours; gone again while the scene drifts on its own ---- */
         .chrome { opacity: 0; transition: opacity 1.4s ease; }
         body[data-phase="live"] .chrome { opacity: 1; }
-        #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 18px; top: max(16px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
+        #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 64px; top: max(16px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
         #label b { display: block; font-weight: 400; font-size: 17px; letter-spacing: 0.04em; opacity: 0.85; }
         #label small { display: block; margin-top: 6px; font-size: 11px; color: var(--faint); }
         body[data-phase="live"] #label a { pointer-events: auto; }
@@ -60,13 +63,29 @@
         #hud nav button { font-size: 11px; letter-spacing: 0.22em; text-indent: 0.22em; text-transform: uppercase; }
         /* five buttons and three shots have to fit across a phone */
         @media (max-width: 420px) { #hud button { min-width: 40px; padding: 0 8px; } #hud nav button { min-width: 0; padding: 0 6px; } }
-        #hud svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+        #hud svg, #about svg, #info-close svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
         #sound[aria-pressed="true"] .off, #sound[aria-pressed="false"] .on { display: none; }
         #relight[aria-pressed="false"] { color: #fff; }
         #relight .half { fill: currentColor; stroke: none; }
         #hint { position: fixed; left: 16px; right: 16px; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 60px); margin: 0; text-align: center; font-size: 12px; letter-spacing: 0.1em; text-shadow: 0 1px 6px #000; opacity: 0; transition: opacity 1s ease; pointer-events: none; }
         #hint.on { opacity: 0.85; }
-        #stats { position: fixed; right: 12px; top: 12px; opacity: 0.6; font-variant-numeric: tabular-nums; text-align: right; white-space: pre; pointer-events: none; }
+        #stats { position: fixed; right: 12px; top: 58px; opacity: 0.6; font-variant-numeric: tabular-nums; text-align: right; white-space: pre; pointer-events: none; }
+        /* ---- how it is done: a button in the corner, and a panel that comes in from the side ---- */
+        #about { position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; color: var(--dim); pointer-events: none; transition: opacity 1.4s ease, color 0.2s; }
+        body[data-phase="live"] #about { pointer-events: auto; }
+        #about:hover, #about:focus-visible { color: #fff; }
+        #info { position: fixed; top: 0; right: 0; bottom: 0; z-index: 5; box-sizing: border-box; width: min(400px, 100vw); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: thin; scrollbar-color: rgba(232, 230, 225, 0.25) transparent; padding: max(26px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-right)) max(30px, env(safe-area-inset-bottom)) 28px; background: rgba(5, 6, 8, 0.84); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-left: 1px solid rgba(232, 230, 225, 0.1); -webkit-user-select: text; user-select: text; transform: translateX(100%); visibility: hidden; transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s 0.45s; }
+        #info.open { transform: none; visibility: visible; transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s; }
+        #info-close { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; color: var(--dim); transition: color 0.2s; }
+        #info-close:hover, #info-close:focus-visible { color: #fff; }
+        #info h2 { margin: 0 44px 0 0; font-size: 11px; font-weight: 400; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); }
+        #info .lede { margin: 16px 0 6px; font: 700 15px/1.55 var(--type); color: var(--ink); }
+        #info h3 { margin: 26px 0 6px; font: 700 13px/1.4 var(--type); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+        #info p { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(232, 230, 225, 0.76); }
+        #info .links { margin-top: 30px; padding-top: 18px; border-top: 1px solid rgba(232, 230, 225, 0.12); font-size: 12px; line-height: 2; }
+        #info .links a { display: block; color: var(--ink); text-decoration: none; }
+        #info .links a:hover { text-decoration: underline; }
+        @media (prefers-reduced-motion: reduce) { #info, #info.open { transition: none; } }
         [hidden] { display: none !important; }
         @media (prefers-reduced-motion: reduce) { #title .card { animation: none; } }
     </style>
@@ -105,6 +124,47 @@
     </div>
     <p id="hint" role="status"></p>
     <div id="stats"></div>
+
+    <button id="about" class="chrome" title="How it works (I)" aria-label="How it works" aria-expanded="false" aria-controls="info">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.3"/></svg>
+    </button>
+    <aside id="info" aria-label="How it works" inert>
+        <button id="info-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+        <h2>How it works</h2>
+        <p class="lede">None of this is video. Every frame is drawn live, in your browser.</p>
+
+        <h3>Two people, as Gaussian splats</h3>
+        <p>The figures are a volumetric capture of two actors, held as 674,612 Gaussian splats: soft, coloured blobs that add up to a photograph you can walk around.</p>
+
+        <h3>Lit after the fact</h3>
+        <p>A splat has the light it was captured in baked into it, and no surface to shade. So a hidden mesh of the pair is built from the splats themselves and lit by ordinary lights. Every pixel of the splats is then multiplied by the light that falls on that mesh. That is what lets a torch light a photograph.</p>
+
+        <h3>Shadows that are really cast</h3>
+        <p>The torch is a spot light with a shadow map, held just beside the lens. A second, more exact mesh casts the shadows: an arm across a face, the two of them across the ground. Lightning is another light, from a new part of the sky each time.</p>
+
+        <h3>Wet ground</h3>
+        <p>The asphalt and its puddles are made in the shader. The reflection is a second, thinner copy of the splats standing upside down beneath the ground, lit to match and seen only where water lies. Rings from the rain bend it.</p>
+
+        <h3>Rain and mist</h3>
+        <p>4,500 drops fall, and each one's splash is worked out from where it has to land, with nothing simulated. Rain and mist are dark until the torch or the lightning finds them, which is why you can see the beam in the air. Splats have no depth of their own, so the mist looks up how far off the figures are, pixel by pixel, to pass behind them.</p>
+
+        <h3>A little life</h3>
+        <p>A capture is one frozen instant. Here the two of them breathe and sway by a few millimetres, and the wind moves her hair and the hem of her dress.</p>
+
+        <h3>Sound to match</h3>
+        <p>Thunder arrives late by the distance of the strike, and from its side of the sky. The rain is three recordings layered; the wind is synthesised, and follows the same gusts that move her hair.</p>
+
+        <h3>In a browser</h3>
+        <p>It runs on the PlayCanvas engine, on WebGPU where there is one and WebGL 2 where there is not. About 19 MB to download, and nothing to install.</p>
+
+        <p class="links">
+            <a href="https://github.com/willeastcott/gaussian-evil" target="_blank" rel="noopener">Source code on GitHub</a>
+            <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">The capture on SuperSplat, by Adrian Cuesta, Dymensium (CC BY 4.0)</a>
+            <a href="https://playcanvas.com" target="_blank" rel="noopener">PlayCanvas</a>
+        </p>
+    </aside>
 
     <div id="title">
         <div class="card">
