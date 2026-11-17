@@ -59,7 +59,7 @@ export function createSoundscape({ app, camera, rain, button }) {
         return Object.fromEntries(names.map((n, i) => [n, data[i]]));
     });
 
-    let ctx = null, master = null, analyser = null, started = false, on = false;
+    let ctx = null, master = null, analyser = null, started = false, on = false, ready = false;
     const buffers = {}, beds = {};
     let wind = null;
     let clock = 0, lastThunder = '';
@@ -131,9 +131,20 @@ export function createSoundscape({ app, camera, rain, button }) {
         src.connect(band).connect(top).connect(gain).connect(master);
         src.start();
         wind = { band, gain };
+        ready = true;
     }
 
-    function thunder({ near, from }) {
+    // A strike may come while the sound is still being started: the click that asked for the
+    // lightning can be the very click that starts the sound. Its thunder waits for the decoding.
+    function thunder(strike) {
+        if (on && ctx && building && (ctx.state !== 'running' || !ready)) {
+            building.then(() => ctx.resume()).then(() => rumble(strike));
+        } else {
+            rumble(strike);
+        }
+    }
+
+    function rumble({ near, from }) {
         if (!on || !ctx || ctx.state !== 'running') return;
         const pool = THUNDER[near > 0.72 ? 'near' : near > 0.42 ? 'mid' : 'far'].filter(n => buffers[n] && n !== lastThunder);
         if (!pool.length) return;

@@ -19,6 +19,12 @@
 // The torch: `state.pointer`, the point on screen it is aimed at, is a mix of where the script
 // points it and where the visitor does (src/aim.js). The mix slides from one to the other, so
 // the beam never jumps.
+//
+// The script also holds the torch whenever the visitor is not aiming it: before they first move
+// the mouse, and when the mouse has gone to a button or off the page. Left at the spot where the
+// pointer crossed the edge, the beam would be on the ground or out in the rain, and the two of
+// them in the dark. So it comes to rest on whatever the camera is looking at, and sways a little
+// there, as a torch does in a hand.
 import * as pc from 'playcanvas';
 
 const smooth = t => t * t * (3 - 2 * t);
@@ -58,6 +64,11 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         eyesAdjust: 3,          // seconds over which it returns
         // ---- a move to another shot: seconds, for no turn at all and for a half turn ----
         glide: [1.3, 2.6],
+        // ---- the torch at rest, when the visitor is not aiming it ----
+        rest: [0.5, 0.4],       // where on screen: the camera looks at the middle, faces are a little above
+        restAfter: 0.3,         // seconds the mouse must be gone before the torch is taken
+        restEase: 0.55,         // seconds (time constant) it takes to come to rest
+        sway: [0.04, 0.025],    // how far it wanders about that point, across and up and down
         // ---- idle ----
         idleAfter: 25,          // seconds without the visitor doing anything
         easeIn: 5,              // seconds the drift takes to get going
@@ -74,6 +85,11 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
 
     const scripted = new pc.Vec2(settings.torchFrom[0], settings.torchFrom[1]);
     let owner = 0, ownerTarget = 0;     // 0: the script aims the torch .. 1: the visitor does
+    let awayFor = 0, restFor = 0;
+    // the torch goes to the visitor, unless their mouse is somewhere else
+    const giveTorch = () => {
+        ownerTarget = aim.away ? 0 : 1;
+    };
 
     const eye = new pc.Vec3(), look = new pc.Vec3();
     const focus = new pc.Vec3(), wanderFrom = new pc.Vec2();
@@ -152,7 +168,7 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
 
         if (aim.mode === 'mouse') {
             // the cursor is wherever the visitor left it: the beam goes there when it next moves
-            ownerTarget = cut ? 1 : ownerTarget;
+            if (cut) giveTorch();
         } else {
             // a tap or a turn of the phone moves the beam from where it now is
             if (cut) scripted.copy(state.pointer);
@@ -251,7 +267,7 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
 
     function wake() {
         handBack();
-        ownerTarget = 1;
+        giveTorch();
         setPhase('live');
     }
 
@@ -286,6 +302,22 @@ export function createDirector({ app, camera, controls, state, aim, lightning, s
         else if (phase === 'idle') stepIdle(dt);
         else if (flight.on) stepGlide(dt);
         else if (phase === 'live' && settings.idleAfter > 0 && clock - lastActivity > settings.idleAfter && !document.hidden) goIdle();
+
+        if (phase === 'live') {
+            // the mouse has gone: take the torch from where it points now
+            awayFor = aim.away ? awayFor + dt : 0;
+            if (ownerTarget === 1 && awayFor > settings.restAfter) {
+                scripted.copy(state.pointer);
+                owner = ownerTarget = 0;
+            }
+            // and while the script holds it, bring it to rest
+            if (ownerTarget === 0) {
+                const o = settings, k = 1 - Math.exp(-dt / o.restEase);
+                restFor += dt;
+                scripted.x += (o.rest[0] + o.sway[0] * Math.sin(restFor * 0.5) - scripted.x) * k;
+                scripted.y += (o.rest[1] + o.sway[1] * Math.sin(restFor * 0.37 + 1.0) - scripted.y) * k;
+            }
+        }
 
         owner += (ownerTarget - owner) * (1 - Math.exp(-dt / 0.25));
         state.pointer.lerp(scripted, aim.user, smooth(sat(owner)));

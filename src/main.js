@@ -8,7 +8,7 @@
 //
 // Query: ?device=webgl2|webgpu  ?proxy=1 (draw the envelope that receives light over the splats)  ?proxy=2 (draw the surface that casts the shadows)  ?debug (stats)
 //        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
-//        ?intro=0 (no title card and no opening: straight to the torch)  ?idle=N (seconds before the scene drifts by itself; 0 for never)
+//        ?intro=0 (no title card and no opening: straight to the torch)  ?idle=N (seconds before the scene drifts by itself; 0 for never)  ?mist=0
 import * as pc from 'playcanvas';
 import { CameraControls } from 'playcanvas/scripts/esm/camera-controls.mjs';
 import { GSplatRelighting } from 'playcanvas/scripts/esm/gsplat/gsplat-relighting.mjs';
@@ -18,6 +18,7 @@ import { createSoundscape } from './audio.js';
 import { createDirector } from './director.js';
 import { createGround } from './ground.js';
 import { createLightning } from './lightning.js';
+import { createMist } from './mist.js';
 import { createPost } from './post.js';
 import { createRain } from './rain.js';
 import { createDepthAwareRelighting } from './relight-depth.js';
@@ -295,6 +296,8 @@ if (wet && query.get('life') === '0') wet.settings.life = 0;
 // ---- rain, caught in the torch beam ----
 const rain = query.get('rain') === '0' ? null : createRain({ app, camera, torch, aim: state.aim });
 const splashes = !rain || query.get('splash') === '0' ? null : createSplashes({ app, camera, rain, ground, ringLayer });
+// ---- a low mist over the ground, shown up by the torch and by lightning (src/mist.js) ----
+const mist = !rain || query.get('mist') === '0' ? null : createMist({ app, rain, relighting });
 
 // ---- lightning: now and then, light from somewhere else in the sky (L fires one) ----
 const lightning = query.get('lightning') === '0' ? null : createLightning({
@@ -368,7 +371,10 @@ document.querySelectorAll('button[data-view]').forEach((b) => {
     b.addEventListener('click', () => setView(/** @type {HTMLElement} */ (b).dataset.view));
 });
 $('relight').addEventListener('click', () => setRelighting(!relighting.enabled));
-$('strike').addEventListener('click', () => lightning?.strike());
+// a strike that is asked for lands close by: bright, and the crack follows within a second.
+// (One left to chance may be a kilometre off, its thunder a dull rumble three seconds later.)
+const strikeNear = () => lightning?.strike({ near: 0.8 + Math.random() * 0.2 });
+$('strike').addEventListener('click', strikeNear);
 $('strike').hidden = !lightning;
 $('fullscreen').addEventListener('click', toggleFullscreen);
 $('fullscreen').hidden = !document.fullscreenEnabled;
@@ -377,7 +383,7 @@ $('hud').addEventListener('click', () => /** @type {HTMLElement} */ (document.ac
 window.addEventListener('keydown', (e) => {
     if (director.phase !== 'live' || e.repeat || e.target instanceof HTMLButtonElement) return;
     if (e.code === 'Space') setRelighting(!relighting.enabled);
-    if (e.code === 'KeyL' && lightning) lightning.strike();
+    if (e.code === 'KeyL') strikeNear();
     if (e.code === 'KeyP') setPost(!post.enabled);
     if (e.code === 'KeyF' && document.fullscreenEnabled) toggleFullscreen();
 });
@@ -425,5 +431,5 @@ if (query.get('intro') === '0') {
 }
 
 if (import.meta.env.DEV) {
-    window.__sr = { pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, lightning, sound, post, setPost };
+    window.__sr = { pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
 }

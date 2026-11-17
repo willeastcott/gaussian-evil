@@ -6,6 +6,9 @@
 //     hand would point. Turning the phone moves the beam across the screen by rather more than
 //     the same angle, so that a small movement of the wrist is enough
 //
+// A mouse can also leave: for a button, or off the page altogether. The torch is then not being
+// aimed at all (`away`), and where the pointer happened to cross the edge means nothing.
+//
 // The result is `user`, a point on the canvas as a fraction of its size. Whoever is directing
 // the scene decides when the torch follows it (src/director.js).
 import * as pc from 'playcanvas';
@@ -28,6 +31,7 @@ export function createAim({ canvas, camera, start }) {
     const touchFirst = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     let mode = touchFirst ? 'touch' : 'mouse';
     let fresh = false;
+    let away = false;              // a mouse that has left the canvas: for a button, or the page
 
     // ---- mouse and pen: hover; touch: taps ----
     let tap = null;                // { id, x, y, at } while a touch might still be a tap
@@ -39,6 +43,7 @@ export function createAim({ canvas, camera, start }) {
     };
     canvas.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch') {
+            away = false;
             place(e);
             return;
         }
@@ -48,6 +53,7 @@ export function createAim({ canvas, camera, start }) {
     canvas.addEventListener('pointermove', (e) => {
         if (e.pointerType !== 'touch') {
             if (mode === 'touch') mode = 'mouse';
+            away = false;
             place(e);
         } else if (tap && tap.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_SLOP) {
             tap = null;
@@ -62,6 +68,10 @@ export function createAim({ canvas, camera, start }) {
         }
         if (touches === 0 || (tap && tap.id === e.pointerId)) tap = null;
     };
+    // (while a drag holds the pointer the canvas keeps it, wherever it goes, and is not left)
+    canvas.addEventListener('pointerleave', (e) => {
+        if (e.pointerType !== 'touch') away = true;
+    });
     canvas.addEventListener('pointerup', lift);
     canvas.addEventListener('pointercancel', lift);
 
@@ -134,6 +144,8 @@ export function createAim({ canvas, camera, start }) {
     return {
         user,
         get mode() { return mode; },
+        /** Whether the visitor's mouse has left the scene, so that nobody is aiming the torch. */
+        get away() { return away; },
         get touch() { return touchFirst; },
         /** @returns {boolean} Whether the visitor has aimed since this was last asked. */
         take() {
