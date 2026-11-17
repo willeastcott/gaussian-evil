@@ -334,10 +334,9 @@ const lightning = query.get('lightning') === '0' ? null : createLightning({
 
 // ---- a lamp behind them, always on ----
 const lamp = query.get('lamp') === '0' ? null : createLamp({
-    app, rain,
+    app, rain, ground,
     layers: [relightLayer.id, casterLayer.id, groundLayer.id, pc.LAYERID_WORLD],
     mirrorLayers: wet ? [wet.mirrorLayer.id] : null,
-    reflectionLayer: wet ? reflectionLayer : null,
     camera, glowLayer: ringLayer
 });
 

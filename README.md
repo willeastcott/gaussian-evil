@@ -51,6 +51,15 @@ Both meshes are in one 4.7 MB file.
 
 Wet asphalt with standing puddles (`src/ground.js`). It is a StandardMaterial, so the torch lights and shadows it like anything else, with four shader chunks replaced by procedural ones that work from the world position. A few octaves of slow noise give the lie of the ground, and water stands wherever that is below the water level. Asphalt is two sizes of stone in dark binder, which sets its colour, gloss and normal. A puddle is flat, nearly black, mirror-glossy and mostly see-through. Detail finer than a pixel fades out with distance so the stones do not shimmer.
 
+Wet ground is mostly what it mirrors, and seen from near the ground a flat fill of sky colour inside a clean outline looked like paint. So what each pixel mirrors is worked out:
+
+- How much it mirrors goes by the angle it is seen at: almost nothing looking straight down, nearly everything along the ground. The angle is taken to the surface as it lies at that point, ripples and stones included, so moving water shows as moving light.
+- What it mirrors is the sky where the mirrored line of sight meets it, darkest overhead and lighter towards the horizon. Water far off is lighter than water at your feet.
+- Wet asphalt has a film of water on it and mirrors too: less, roughly, and most on the face of a stone. From low down it is no longer a black shape beside the water.
+- Water deepens little by little. At its edge the stones stand out of it, so the waterline follows them and is never a clean curve.
+- Ripples too small to see from where the camera is are left out of the surface, where they would only flicker, and blur what the water mirrors instead.
+- The lamp is mirrored as a streak towards whoever is looking: short and bright on water, long and faint on asphalt. A lamp is far brighter than a screen can show, so how thinly its image is spread is weighed up before its brightness is capped.
+
 ### The reflection
 
 The reflection is made of splats too; there is no reflection pass. `tools/mirror-ply.mjs` writes a copy of the capture mirrored in the floor plane, thinned to 35% (`public/mirror.sog`). A vertex hook (`src/wet-floor.js`) treats every splat below the floor as a reflection: it fades with depth and viewing angle, grows so that it blurs with distance from the surface, and slides sideways in slow ripples. A mirrored proxy mesh under a mirrored torch, on its own layer, lights it to match the real figures.
@@ -101,7 +110,7 @@ Flashing stays within the usual photosensitivity limit of three flashes a second
 
 ### The lamp, and the night
 
-Two lit figures in a black void say nothing about where they are, and when the torch is elsewhere nothing shows at all. So there is a lamp on a short mast a few metres behind them (`src/lamp.js`). It is an ordinary spot light on the same layers as the torch: cold where the torch is warm, and from behind, so it draws an edge of light round the pair and throws their shadows towards the camera. Its shadow map is drawn once, because neither it nor the mesh that casts the shadows ever moves; it costs about a millisecond a frame. A mirrored twin lights the reflections and a mirrored lens stands under the ground for the puddles to show. Rain and mist are lit in their own shaders, so they are told where the lamp is and the rain in its beam can always be seen. It stands that close because the rain is a box 8 m square about the pair. It flickers: mostly steady, with a short stutter every few seconds (never with `prefers-reduced-motion`). A soft halo, turned to the camera, keeps the lens from looking like a lit sign.
+Two lit figures in a black void say nothing about where they are, and when the torch is elsewhere nothing shows at all. So there is a lamp on a short mast a few metres behind them (`src/lamp.js`). It is an ordinary spot light on the same layers as the torch: cold where the torch is warm, and from behind, so it draws an edge of light round the pair and throws their shadows towards the camera. Its shadow map is drawn once, because neither it nor the mesh that casts the shadows ever moves; it costs about a millisecond a frame. A mirrored twin lights the reflections, and the ground mirrors the lamp itself as a streak of light. Rain and mist are lit in their own shaders, so they are told where the lamp is and the rain in its beam can always be seen. It stands that close because the rain is a box 8 m square about the pair. It flickers: mostly steady, with a short stutter every few seconds (never with `prefers-reduced-motion`). A soft halo, turned to the camera, keeps the lens from looking like a lit sign.
 
 The night itself is no longer quite black either: the sky is just light enough for the ground to end against, standing water shows as water, and every drop of rain carries a trace of light. Measured over the film, the picture had sat about 3% above black between flashes.
 

@@ -8,9 +8,9 @@
 //
 // It is an ordinary spot light on the same layers as the torch, so it lights the proxy mesh (and
 // through it the splats) and the ground. Its shadow map is drawn once: neither it nor the mesh
-// that casts the shadows ever moves. A mirrored twin lights the reflections, and a mirrored
-// copy of its lens stands under the ground, to be seen in the puddles. The rain and the mist are
-// lit in their own shaders, so they are told where the lamp is (src/rain.js).
+// that casts the shadows ever moves. A mirrored twin lights the reflections. The rain and the
+// mist are lit in their own shaders, so they are told where the lamp is (src/rain.js), and so is
+// the ground, which mirrors the lamp itself as a streak of light (src/ground.js).
 //
 // A bare lit rectangle in the dark looks like a sign, not a light. So a soft halo is drawn about
 // the lens, turned to face the camera: the glare of a lamp seen through rain.
@@ -53,12 +53,12 @@ export function flicker(t) {
  * @param {object|null} o.rain - From createRain: its drops and the mist are lit by the lamp too.
  * @param {number[]} o.layers - Layers the lamp lights and takes its shadows from.
  * @param {number[]|null} o.mirrorLayers - The same for the reflected figures, if there are any.
- * @param {pc.Layer|null} o.reflectionLayer - The layer drawn under the ground: the lamp's own reflection.
+ * @param {object|null} o.ground - From createGround: the wet ground mirrors the lamp.
  * @param {pc.Entity} o.camera - Main camera: the halo is turned to it.
  * @param {pc.Layer} o.glowLayer - A layer drawn before the figures, so that they hide the halo.
  * @returns {object} Settings, and the entities made.
  */
-export function createLamp({ app, rain, layers, mirrorLayers, reflectionLayer, camera, glowLayer }) {
+export function createLamp({ app, rain, ground, layers, mirrorLayers, camera, glowLayer }) {
     const settings = {
         base: new pc.Vec3(-1.9, 0, -3.9),       // the foot of the mast: behind them, a little to one side
         height: 3.0,
@@ -73,6 +73,8 @@ export function createLamp({ app, rain, layers, mirrorLayers, reflectionLayer, c
         glow: 1.6,                              // of the lens itself
         halo: 0.55,                             // of the glare about it
         haloSize: 2.2,                          // metres across
+        mirrored: 1.3,                          // the brightest its image gets in the wet ground
+        mirroredStrength: 24,                   // and how strongly that image shows: more reaches further over rough ground
         flicker: 1                              // 0 for a steady lamp
     };
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -134,19 +136,15 @@ export function createLamp({ app, rain, layers, mirrorLayers, reflectionLayer, c
     root.addChild(arm);
 
     // the head looks along its own -Z at the spot it lights
-    const makeHead = (name, at, lensLayers) => {
-        const head = new pc.Entity(name);
-        head.setPosition(at);
-        head.lookAt(settings.target);
-        const lens = part('lens', 'plane', lensMaterial, lensLayers);
-        lens.setLocalEulerAngles(-90, 0, 0);        // a plane faces +Y: turn that to -Z
-        lens.setLocalPosition(0, 0, -0.07);
-        lens.setLocalScale(0.3, 1, 0.16);
-        head.addChild(lens);
-        root.addChild(head);
-        return head;
-    };
-    const head = makeHead('head', headAt, [pc.LAYERID_WORLD]);
+    const head = new pc.Entity('head');
+    head.setPosition(headAt);
+    head.lookAt(settings.target);
+    const lens = part('lens', 'plane', lensMaterial);
+    lens.setLocalEulerAngles(-90, 0, 0);        // a plane faces +Y: turn that to -Z
+    lens.setLocalPosition(0, 0, -0.07);
+    lens.setLocalScale(0.3, 1, 0.16);
+    head.addChild(lens);
+    root.addChild(head);
     const housing = part('housing', 'box', metal);
     housing.setLocalScale(0.36, 0.2, 0.12);
     head.addChild(housing);
@@ -178,7 +176,7 @@ export function createLamp({ app, rain, layers, mirrorLayers, reflectionLayer, c
     light.rotateLocal(90, 0, 0);        // a spot light shines down its -Y axis
     root.addChild(light);
 
-    // under the ground: the light on the reflected figures, and the lens as the puddles show it
+    // under the ground: the light on the reflected figures
     const under = new pc.Vec3(headAt.x, -headAt.y, headAt.z);
     let mirrorLight = null;
     if (mirrorLayers) {
@@ -198,7 +196,6 @@ export function createLamp({ app, rain, layers, mirrorLayers, reflectionLayer, c
         mirrorLight.rotateLocal(90, 0, 0);
         root.addChild(mirrorLight);
     }
-    if (reflectionLayer) makeHead('head-mirror', under, [reflectionLayer.id]);
 
     const axis = settings.target.clone().sub(headAt).normalize();
     const cosInner = Math.cos(settings.inner * pc.math.DEG_TO_RAD), cosOuter = Math.cos(settings.outer * pc.math.DEG_TO_RAD);
@@ -218,6 +215,14 @@ export function createLamp({ app, rain, layers, mirrorLayers, reflectionLayer, c
         // (a plane faces +Y: looked at the camera, then tipped over, it faces the camera)
         halo.lookAt(camera.getPosition());
         halo.rotateLocal(-90, 0, 0);
+        if (ground) {
+            const glow = settings.mirrored * level;
+            ground.settings.lamp = {
+                position: [headAt.x, headAt.y, headAt.z],
+                strength: settings.mirroredStrength,
+                glow: [settings.color.r * glow, settings.color.g * glow, settings.color.b * glow]
+            };
+        }
         if (rain) {
             rain.settings.lamp = {
                 position: [headAt.x, headAt.y, headAt.z],

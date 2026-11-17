@@ -7,8 +7,26 @@
 //     Water stands wherever the ground is below the water level: that is a puddle
 //   - asphalt is two sizes of stone in dark binder: it sets the colour, how glossy each point is
 //     and, through the noise's gradient, the normal, so the torch rakes across a rough surface
-//   - a puddle is flat, nearly black, mirror-glossy and mostly see-through. It mirrors the sky,
-//     which is black until lightning lights it
+//   - a puddle is flat, nearly black, mirror-glossy and mostly see-through
+//
+// Wet ground is mostly what it mirrors, and that is worked out for every pixel:
+//
+//   - how much it mirrors goes by the angle it is seen at: almost nothing looking straight down
+//     into it, nearly everything along the ground. The angle is taken to the surface as it lies
+//     at that point, ripples and stones and all, so moving water shows as moving light
+//   - what it mirrors is the sky where the mirrored line of sight meets it, and the sky is darkest
+//     overhead and lighter towards the horizon. So water far off is lighter than water at your
+//     feet, and a ripple, which tips the mirror, shows as a band of lighter or darker sky
+//   - wet asphalt has a film of water on it, and mirrors too: less, and roughly, and most where a
+//     stone's face catches it. Seen from low down it is not a black shape beside the water
+//   - water deepens little by little. At its edge it is a film with the stones standing out of
+//     it, so the waterline follows the stones and is never a clean curve
+//   - ripples too small to see from where the camera is are left out of the surface, where they
+//     would only flicker, and blur what the water mirrors instead
+//   - the lamp behind the pair (src/lamp.js) is mirrored as well. It is a small bright thing, and
+//     wet ground is not quite a mirror: every ripple and every stone tips its own bit of surface,
+//     so the lamp's image is drawn out into a streak towards whoever is looking. On still water
+//     it is short and bright, on rough wet asphalt long and faint
 //
 // See-through is what makes the reflection. The reflected figures (src/wet-floor.js) are drawn
 // first, on a layer under this one; the ground is drawn over them, opaque where it is asphalt and
@@ -52,30 +70,29 @@ vec2 groundLie(vec2 p) {
 
 const COMMON_GLSL = /* glsl */`
 uniform vec3 uGroundEye;
-uniform vec3 uGroundSky;        // the sky the puddles mirror: black, but for lightning
+uniform vec3 uGroundSky;        // the sky that wet ground mirrors: dark, but for lightning
 uniform float uGroundTime;
 uniform vec4 uGroundStone;      // fine stones per metre, coarse stones per metre, height of the relief (m), ripple slope
+uniform vec4 uGroundLamp;       // where the lamp is, and how strongly its image shows: 0 for no lamp
+uniform vec3 uGroundLampGlow;   // the brightest that image gets, by colour
 
-float gPuddle;      // 1 in standing water
+float gPuddle;      // 0 dry .. 1 standing water, deep enough to lie flat
 float gDamp;        // 1 where the asphalt is soaked, around a puddle
 float gGrain;       // 0 binder .. 1 stone
 float gTone;        // slow variation in how dark the surface is
-float gMirror;      // how much of the sky water reflects at this angle
+float gBlur;        // 0 .. 1: how much of the water's ripple is too fine to see from here
+vec3 gMirror;       // the sky, as this point mirrors it
 vec3 gNormal;
 
 void groundEval() {
     vec2 p = vPositionW.xz;
     vec3 toEye = uGroundEye - vPositionW;
     float dist = length(toEye);
-    gMirror = 0.04 + 0.96 * pow(1.0 - clamp(toEye.y / dist, 0.0, 1.0), 5.0);
+    vec3 view = toEye / dist;
     // the size of a pixel on the ground (m), averaged over its long and short sides
     float pixel = dist * 0.0005 * sqrt(dist / max(toEye.y, 0.02));
 
     vec2 lay = groundLie(p);
-    float lie = lay.x;
-    float soft = 0.006 + pixel * 0.6;
-    gPuddle = 1.0 - smoothstep(uGroundPuddle.x - soft, uGroundPuddle.x + soft, lie);
-    gDamp = 1.0 - smoothstep(uGroundPuddle.x, uGroundPuddle.x + 0.07, lie);
     gTone = 0.75 + 0.5 * lay.y;
 
     // the stones
@@ -84,14 +101,56 @@ void groundEval() {
     vec3 s0 = groundNoise(p * uGroundStone.x);
     vec3 s1 = groundNoise(p * uGroundStone.y + 17.3);
     gGrain = mix(0.5, s0.x, fine) * 0.45 + mix(0.5, s1.x, coarse) * 0.55;
-    vec2 slope = (s0.yz * (uGroundStone.x * 0.4 * fine) + s1.yz * (uGroundStone.y * 0.6 * coarse)) * uGroundStone.z;
+    vec2 stones = (s0.yz * (uGroundStone.x * 0.4 * fine) + s1.yz * (uGroundStone.y * 0.6 * coarse)) * uGroundStone.z;
 
-    // water lies flat, but for the rain keeping its surface moving
+    // The shore. Depth is in the units of the lie of the ground: 0.03 of it is some five
+    // centimetres of shore. The stones stand out of the shallowest water, so they shift the
+    // waterline, each by its own height.
+    float depth = uGroundPuddle.x - lay.x + (0.5 - gGrain) * 0.014;
+    float soft = 0.004 + pixel * 0.6;
+    gPuddle = smoothstep(-soft, 0.03 + soft, depth);
+    gDamp = 1.0 - smoothstep(0.0, 0.07, -depth);
+
+    // rain keeps the water moving: two sizes of ripple, sliding past each other. Each is left
+    // out as it gets too small to see, and counted as blur
+    float seen0 = 1.0 - smoothstep(0.2, 0.8, pixel * 5.0);
+    float seen1 = 1.0 - smoothstep(0.2, 0.8, pixel * 11.0);
     vec3 r0 = groundNoise(p * 5.0 + vec2(0.35, 0.22) * uGroundTime);
     vec3 r1 = groundNoise(p * 11.0 - vec2(0.5, -0.3) * uGroundTime);
-    slope = mix(slope, (r0.yz + r1.yz * 0.6) * uGroundStone.w, gPuddle);
+    vec2 ripple = (r0.yz * seen0 + r1.yz * (0.6 * seen1)) * uGroundStone.w;
+    gBlur = 1.0 - (seen0 + 0.6 * seen1) / 1.6;
 
+    vec2 slope = mix(stones, ripple, gPuddle);
     gNormal = normalize(vec3(-slope.x, 1.0, -slope.y));
+
+    // how much is mirrored, by the angle to the surface as it lies here
+    float facing = clamp(dot(gNormal, view), 0.0, 1.0);
+    float fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
+    // what is mirrored: the sky, where the mirrored line of sight meets it
+    float up = clamp(reflect(-view, gNormal).y, 0.0, 1.0);
+    vec3 sky = uGroundSky * mix(1.7, 0.55, smoothstep(0.0, 0.45, up));
+    // water mirrors it whole; the film on wet asphalt a part of it, more where it is soaked and
+    // on the face of a stone
+    float film = mix(0.1, 0.3, gDamp) * (0.55 + 0.9 * gGrain);
+    gMirror = sky * (fresnel * mix(film, 1.0, gPuddle));
+
+    // The lamp, mirrored. How far its image is drawn out goes by how rough the surface is:
+    // water in the rain a good way (it is never still), more where its ripples are too fine to
+    // see, and the film on asphalt further again. The rougher, the more thinly the light is spread.
+    vec3 toLamp = uGroundLamp.xyz - vPositionW;
+    float reach = dot(toLamp, toLamp);
+    vec3 between = normalize(toLamp / sqrt(reach) + view);
+    float rough = mix(mix(0.22, 0.15, gDamp), mix(0.075, 0.13, gBlur), gPuddle);
+    float r2 = rough * rough;
+    float tip = clamp(dot(gNormal, between), 0.0, 1.0);
+    float lobe = r2 / (tip * tip * (r2 - 1.0) + 1.0);
+    float spread = uGroundLamp.w / (reach * 3.1416 * r2);
+    float glance = 0.02 + 0.98 * pow(1.0 - clamp(dot(view, between), 0.0, 1.0), 5.0);
+    // A lamp is far brighter than anything it lights, and brighter than a screen can show. So
+    // its image is still as bright as the lamp looks when it is spread a little, and only fades
+    // when it is spread a lot: the spreading is weighed up first, and the cap put on after.
+    float image = lobe * lobe * spread * glance * mix(0.35 + 0.65 * gDamp, 1.0, gPuddle);
+    gMirror += uGroundLampGlow * (1.0 - exp(-image));
 }
 `;
 
@@ -128,7 +187,8 @@ void getNormal() {
 const GLOSS_GLSL = /* glsl */`
 void getGlossiness() {
     dGlossiness = mix(mix(0.38, 0.6, gGrain), 0.72, gDamp);
-    dGlossiness = mix(dGlossiness, 0.97, gPuddle);
+    // still water is a mirror; ripples too fine to see blur it
+    dGlossiness = mix(dGlossiness, mix(0.97, 0.84, gBlur), gPuddle);
 }
 `;
 
@@ -173,38 +233,37 @@ fn groundLie(p: vec2f) -> vec2f {
 const EMISSIVE_GLSL = /* glsl */`
 void getEmission() {
     // water is thin (see getOpacity), so what it mirrors is scaled up to survive the blend
-    dEmission = uGroundSky * (gMirror * gPuddle / max(dAlpha, 0.05));
+    dEmission = gMirror / max(dAlpha, 0.05);
 }
 `;
 
 const COMMON_WGSL = /* wgsl */`
 uniform uGroundEye: vec3f;
-uniform uGroundSky: vec3f;        // the sky the puddles mirror: black, but for lightning
+uniform uGroundSky: vec3f;        // the sky that wet ground mirrors: dark, but for lightning
 uniform uGroundTime: f32;
 uniform uGroundStone: vec4f;      // fine stones per metre, coarse stones per metre, height of the relief (m), ripple slope
+uniform uGroundLamp: vec4f;       // where the lamp is, and how strongly its image shows: 0 for no lamp
+uniform uGroundLampGlow: vec3f;   // the brightest that image gets, by colour
 
-var<private> gPuddle: f32;      // 1 in standing water
+var<private> gPuddle: f32;      // 0 dry .. 1 standing water, deep enough to lie flat
 var<private> gDamp: f32;        // 1 where the asphalt is soaked, around a puddle
 var<private> gGrain: f32;       // 0 binder .. 1 stone
 var<private> gTone: f32;        // slow variation in how dark the surface is
-var<private> gMirror: f32;      // how much of the sky water reflects at this angle
+var<private> gBlur: f32;        // 0 .. 1: how much of the water's ripple is too fine to see from here
+var<private> gMirror: vec3f;    // the sky, as this point mirrors it
 var<private> gNormal: vec3f;
 
 fn groundEval() {
     let p = vPositionW.xz;
     let toEye = uniform.uGroundEye - vPositionW;
     let dist = length(toEye);
-    gMirror = 0.04 + 0.96 * pow(1.0 - clamp(toEye.y / dist, 0.0, 1.0), 5.0);
+    let view = toEye / dist;
     // the size of a pixel on the ground (m), averaged over its long and short sides
     let pixel = dist * 0.0005 * sqrt(dist / max(toEye.y, 0.02));
     let puddle = uniform.uGroundPuddle;
     let stone = uniform.uGroundStone;
 
     let lay = groundLie(p);
-    let lie = lay.x;
-    let soft = 0.006 + pixel * 0.6;
-    gPuddle = 1.0 - smoothstep(puddle.x - soft, puddle.x + soft, lie);
-    gDamp = 1.0 - smoothstep(puddle.x, puddle.x + 0.07, lie);
     gTone = 0.75 + 0.5 * lay.y;
 
     // the stones
@@ -213,14 +272,56 @@ fn groundEval() {
     let s0 = groundNoise(p * stone.x);
     let s1 = groundNoise(p * stone.y + 17.3);
     gGrain = mix(0.5, s0.x, fine) * 0.45 + mix(0.5, s1.x, coarse) * 0.55;
-    var slope = (s0.yz * (stone.x * 0.4 * fine) + s1.yz * (stone.y * 0.6 * coarse)) * stone.z;
+    let stones = (s0.yz * (stone.x * 0.4 * fine) + s1.yz * (stone.y * 0.6 * coarse)) * stone.z;
 
-    // water lies flat, but for the rain keeping its surface moving
+    // The shore. Depth is in the units of the lie of the ground: 0.03 of it is some five
+    // centimetres of shore. The stones stand out of the shallowest water, so they shift the
+    // waterline, each by its own height.
+    let depth = puddle.x - lay.x + (0.5 - gGrain) * 0.014;
+    let soft = 0.004 + pixel * 0.6;
+    gPuddle = smoothstep(-soft, 0.03 + soft, depth);
+    gDamp = 1.0 - smoothstep(0.0, 0.07, -depth);
+
+    // rain keeps the water moving: two sizes of ripple, sliding past each other. Each is left
+    // out as it gets too small to see, and counted as blur
+    let seen0 = 1.0 - smoothstep(0.2, 0.8, pixel * 5.0);
+    let seen1 = 1.0 - smoothstep(0.2, 0.8, pixel * 11.0);
     let r0 = groundNoise(p * 5.0 + vec2f(0.35, 0.22) * uniform.uGroundTime);
     let r1 = groundNoise(p * 11.0 - vec2f(0.5, -0.3) * uniform.uGroundTime);
-    slope = mix(slope, (r0.yz + r1.yz * 0.6) * stone.w, gPuddle);
+    let ripple = (r0.yz * seen0 + r1.yz * (0.6 * seen1)) * stone.w;
+    gBlur = 1.0 - (seen0 + 0.6 * seen1) / 1.6;
 
+    let slope = mix(stones, ripple, gPuddle);
     gNormal = normalize(vec3f(-slope.x, 1.0, -slope.y));
+
+    // how much is mirrored, by the angle to the surface as it lies here
+    let facing = clamp(dot(gNormal, view), 0.0, 1.0);
+    let fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
+    // what is mirrored: the sky, where the mirrored line of sight meets it
+    let up = clamp(reflect(-view, gNormal).y, 0.0, 1.0);
+    let sky = uniform.uGroundSky * mix(1.7, 0.55, smoothstep(0.0, 0.45, up));
+    // water mirrors it whole; the film on wet asphalt a part of it, more where it is soaked and
+    // on the face of a stone
+    let film = mix(0.1, 0.3, gDamp) * (0.55 + 0.9 * gGrain);
+    gMirror = sky * (fresnel * mix(film, 1.0, gPuddle));
+
+    // The lamp, mirrored. How far its image is drawn out goes by how rough the surface is:
+    // water in the rain a good way (it is never still), more where its ripples are too fine to
+    // see, and the film on asphalt further again. The rougher, the more thinly the light is spread.
+    let toLamp = uniform.uGroundLamp.xyz - vPositionW;
+    let reach = dot(toLamp, toLamp);
+    let between = normalize(toLamp / sqrt(reach) + view);
+    let rough = mix(mix(0.22, 0.15, gDamp), mix(0.075, 0.13, gBlur), gPuddle);
+    let r2 = rough * rough;
+    let tip = clamp(dot(gNormal, between), 0.0, 1.0);
+    let lobe = r2 / (tip * tip * (r2 - 1.0) + 1.0);
+    let spread = uniform.uGroundLamp.w / (reach * 3.1416 * r2);
+    let glance = 0.02 + 0.98 * pow(1.0 - clamp(dot(view, between), 0.0, 1.0), 5.0);
+    // A lamp is far brighter than anything it lights, and brighter than a screen can show. So
+    // its image is still as bright as the lamp looks when it is spread a little, and only fades
+    // when it is spread a lot: the spreading is weighed up first, and the cap put on after.
+    let image = lobe * lobe * spread * glance * mix(0.35 + 0.65 * gDamp, 1.0, gPuddle);
+    gMirror = gMirror + uniform.uGroundLampGlow * (1.0 - exp(-image));
 }
 `;
 
@@ -257,14 +358,15 @@ fn getNormal() {
 const GLOSS_WGSL = /* wgsl */`
 fn getGlossiness() {
     dGlossiness = mix(mix(0.38, 0.6, gGrain), 0.72, gDamp);
-    dGlossiness = mix(dGlossiness, 0.97, gPuddle);
+    // still water is a mirror; ripples too fine to see blur it
+    dGlossiness = mix(dGlossiness, mix(0.97, 0.84, gBlur), gPuddle);
 }
 `;
 
 const EMISSIVE_WGSL = /* wgsl */`
 fn getEmission() {
     // water is thin (see getOpacity), so what it mirrors is scaled up to survive the blend
-    dEmission = uniform.uGroundSky * (gMirror * gPuddle / max(dAlpha, 0.05));
+    dEmission = gMirror / max(dAlpha, 0.05);
 }
 `;
 
@@ -284,8 +386,10 @@ export function createGround({ app, camera, layer }) {
         fineStones: 130,        // per metre
         coarseStones: 48,
         relief: 0.004,          // metres
-        ripple: 0.02,           // slope of the water's surface
-        sky: [0, 0, 0]          // what the puddles mirror; src/lightning.js sets it
+        ripple: 0.045,          // slope of the water's surface
+        sky: [0, 0, 0],         // what the wet ground mirrors, overhead; src/lightning.js sets it
+        // the lamp it mirrors: where it is, how strongly its image shows, and the brightest that gets, by colour. src/lamp.js sets it
+        lamp: { position: [0, 10, 0], strength: 0, glow: [0, 0, 0] }
     };
 
     const material = new pc.StandardMaterial();
@@ -323,6 +427,8 @@ export function createGround({ app, camera, layer }) {
         material.setParameter('uGroundPuddle', [settings.waterLevel, settings.waterOpacity, settings.dipRadius, settings.dipDepth]);
         material.setParameter('uGroundSky', settings.sky);
         material.setParameter('uGroundStone', [settings.fineStones, settings.coarseStones, settings.relief, settings.ripple]);
+        material.setParameter('uGroundLamp', [...settings.lamp.position, settings.lamp.strength]);
+        material.setParameter('uGroundLampGlow', settings.lamp.glow);
     });
 
     return { settings, entity, material };
