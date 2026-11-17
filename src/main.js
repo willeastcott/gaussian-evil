@@ -7,7 +7,7 @@
 // the proxy mesh casts the figures' shadows, on them and onto the ground.
 //
 // Query: ?device=webgl2|webgpu  ?proxy=1 (draw the proxy mesh over the splats)  ?proxy=2 (draw the shadow caster)  ?debug (stats)
-//        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?life=0 (the figures as captured)
+//        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
 import * as pc from 'playcanvas';
 import { CameraControls } from 'playcanvas/scripts/esm/camera-controls.mjs';
 import { GSplatRelighting } from 'playcanvas/scripts/esm/gsplat/gsplat-relighting.mjs';
@@ -15,6 +15,7 @@ import { GSplatRelighting } from 'playcanvas/scripts/esm/gsplat/gsplat-relightin
 import { createSoundscape } from './audio.js';
 import { createGround } from './ground.js';
 import { createLightning } from './lightning.js';
+import { createPost } from './post.js';
 import { createRain } from './rain.js';
 import { createSplashes } from './splash.js';
 import { createCasterEntity, createCasterMesh } from './shadow-caster.js';
@@ -254,6 +255,9 @@ const soundButton = document.getElementById('sound');
 const sound = query.get('sound') === '0' ? null : createSoundscape({ app, camera, rain: !!rain, button: soundButton });
 if (!sound) soundButton.hidden = true;
 
+// ---- post effects: glow, vignette and grain over the finished picture ----
+const post = query.get('post') === '0' ? null : createPost({ app, camera });
+
 // ---- views ----
 const views = { wide: WIDE };
 for (const [name, { head, facing, hand }] of Object.entries(HEADS)) {
@@ -296,5 +300,5 @@ if (query.has('debug')) {
 document.getElementById('loading').classList.add('done');
 
 if (import.meta.env.DEV) {
-    window.__sr = { pc, app, device, camera, controls, relighting, torch, stage, splat, proxy, caster, ground, state, views, setView, setRelighting, toWorld, wet, rain, splashes, lightning, sound };
+    window.__sr = { pc, app, device, camera, controls, relighting, torch, stage, splat, proxy, caster, ground, state, views, setView, setRelighting, toWorld, wet, rain, splashes, lightning, sound, post };
 }

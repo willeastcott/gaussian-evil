@@ -40,6 +40,10 @@ Every so often the whole scene is lit from somewhere else (`src/lightning.js`). 
 
 Flashing stays within the usual photosensitivity limit of three flashes a second, and with `prefers-reduced-motion` a strike is one slow swell.
 
+### Post effects
+
+`src/post.js` adds a glow around what is bright, a vignette and film grain. The engine's own effects (`CameraFrame`) are not used: they draw the scene into a linear-light target, so splats blend in linear light, which turns dark cloth grey. Here the camera draws exactly as it would to the screen, only into an 8-bit texture, and a second camera that owns no geometry runs six full-screen passes over it: keep what is brighter than a threshold at a quarter of the size, blur that tightly, blur it again at an eighth of the size for a wide halo, then add both glows back as light and finish with the vignette and grain. It costs about a millisecond a frame.
+
 ### Sound
 
 `src/audio.js` plays rain, wind and thunder through Web Audio.
@@ -57,7 +61,7 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the proxy mesh over the splats, `?proxy=2` to draw the slimmer shadow caster, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound.
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the proxy mesh over the splats, `?proxy=2` to draw the slimmer shadow caster, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` for no post effects.
 
 ## Rebuild the data
 
