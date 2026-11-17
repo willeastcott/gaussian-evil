@@ -9,6 +9,7 @@
 // Query: ?device=webgl2|webgpu  ?proxy=1 (draw the envelope that receives light over the splats)  ?proxy=2 (draw the surface that casts the shadows)  ?debug (stats)
 //        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
 //        ?intro=0 (no title card and no opening: straight to the torch)  ?idle=N (seconds before the scene drifts by itself; 0 for never)  ?mist=0
+//        ?lamp=0 (no lamp behind them)
 //        ?demo (no title card: the scene plays by itself, as a film, until somebody clicks)  ?demo=0 (Enter hands the torch over after a short opening, with no film)
 import * as pc from 'playcanvas';
 import { CameraControls } from 'playcanvas/scripts/esm/camera-controls.mjs';
@@ -19,6 +20,7 @@ import { createSoundscape } from './audio.js';
 import { createDemo } from './demo.js';
 import { createDirector } from './director.js';
 import { createGround } from './ground.js';
+import { createLamp } from './lamp.js';
 import { createLightning } from './lightning.js';
 import { createMist } from './mist.js';
 import { createPost } from './post.js';
@@ -141,9 +143,27 @@ camera.addComponent('camera', { clearColor: new pc.Color(0, 0, 0), fov: FOV, nea
 // A phone held upright sees a narrow slice of the scene, and the two of them stand side by side:
 // from the same place his elbow and her pistol are out of the frame. So on a tall screen the lens
 // widens, to keep the same width in view.
+//
+// While the film plays, the picture is letterboxed: two black bars (index.html) leave a band the
+// shape of a cinema screen. The lens widens to match, so that the band takes in, top to bottom,
+// what the whole screen did: the bars add picture at the sides, they do not crop it. When the
+// torch is taken the bars slide away and the lens closes in again, and the picture grows to fill
+// the screen. A screen held upright has no bars: there is no width to spare.
+const BAND = 2.39;              // how wide the band is for its height
+const BAR_MOST = 0.13;          // the most of the screen's height that one bar takes
+const BARS_TAKE = 0.9;          // seconds they take to slide in or out
+let bars = 1;                   // 0 out .. 1 in: the page opens on the title card, behind which they are in
+const barShare = () => {
+    const w = canvas.clientWidth, h = Math.max(canvas.clientHeight, 1);
+    return w <= h || document.body.classList.contains('capturing') ? 0 : pc.math.clamp((1 - w / h / BAND) / 2, 0, BAR_MOST);
+};
 const frameLens = () => {
     const across = Math.tan(FOV_ACROSS * 0.5 * pc.math.DEG_TO_RAD) * canvas.clientHeight / Math.max(canvas.clientWidth, 1);
-    camera.camera.fov = pc.math.clamp(2 * Math.atan(across) * pc.math.RAD_TO_DEG, FOV, FOV_TALLEST);
+    const fov = pc.math.clamp(2 * Math.atan(across) * pc.math.RAD_TO_DEG, FOV, FOV_TALLEST);
+    const share = barShare();
+    camera.camera.fov = 2 * Math.atan(Math.tan(fov * 0.5 * pc.math.DEG_TO_RAD) / (1 - 2 * share * bars)) * pc.math.RAD_TO_DEG;
+    document.documentElement.style.setProperty('--bar', `${(share * canvas.clientHeight).toFixed(1)}px`);
+    document.documentElement.style.setProperty('--bars', bars.toFixed(4));
 };
 frameLens();
 window.addEventListener('resize', frameLens);
@@ -312,6 +332,15 @@ const lightning = query.get('lightning') === '0' ? null : createLightning({
     mirrorLayers: wet ? [wet.mirrorLayer.id, wet.mirrorCasterLayer.id] : null
 });
 
+// ---- a lamp behind them, always on ----
+const lamp = query.get('lamp') === '0' ? null : createLamp({
+    app, rain,
+    layers: [relightLayer.id, casterLayer.id, groundLayer.id, pc.LAYERID_WORLD],
+    mirrorLayers: wet ? [wet.mirrorLayer.id] : null,
+    reflectionLayer: wet ? reflectionLayer : null,
+    camera, glowLayer: ringLayer
+});
+
 // ---- sound: rain, wind and thunder, started by the way in or the first click or key ----
 const $ = id => document.getElementById(id);
 const soundButton = $('sound');
@@ -396,6 +425,21 @@ canvas.addEventListener('pointermove', (e) => {
 });
 if (query.has('idle')) director.settings.idleAfter = Number(query.get('idle'));
 direct = director.update;
+
+// the bars are in while the script has the picture, and out while the visitor does. (By the
+// clock on the wall, not the scene's: they are part of the page.)
+let barsAt = 1, barsThen = performance.now();
+const setBars = (at) => {
+    barsAt = at;
+    bars = at * at * (3 - 2 * at);
+    frameLens();
+};
+app.on('update', () => {
+    const now = performance.now(), dt = Math.min(0.1, (now - barsThen) / 1000);
+    barsThen = now;
+    const want = ['title', 'opening', 'demo'].includes(director.phase) ? 1 : 0;
+    if (barsAt !== want) setBars(want > barsAt ? Math.min(1, barsAt + dt / BARS_TAKE) : Math.max(0, barsAt - dt / BARS_TAKE));
+});
 
 // ---- the panel that says how it is done ----
 const info = $('info');
@@ -499,19 +543,30 @@ if (query.has('demo') && query.get('demo') !== '0') {
         // inside the click: sound may start, and an iPhone may be asked which way it is facing
         const audible = sound ? sound.start().catch(() => {}) : Promise.resolve();
         aim.enableTilt();
-        title.dismiss();
+        // everything but the name leaves the card at once: the click has been heard
+        title.speak();
         // what follows waits for the sound to be decoded, but not for long: the thunder is part of it
         Promise.race([audible, new Promise(resolve => setTimeout(resolve, 2500))]).then(() => {
-            if (!film) return director.begin();
-            director.watch();
-            setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
+            // The name is said aloud over the title, as the series says its own on its title
+            // screen, and the card stays up until the last word is nearly out. (With no sound, it
+            // goes at once.)
+            const said = sound?.announce() ?? 0;
+            setTimeout(() => {
+                title.dismiss();
+                if (!film) return director.begin();
+                director.watch();
+                setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
+            }, Math.max(0, said - 0.3) * 1000);
         });
     });
 }
+
+// straight to the torch, there were never any bars
+if (director.phase === 'live') setBars(0);
 
 if (import.meta.env.DEV) {
     // rendering the film to a video file (src/capture.js): __sr.capture.run()
     const { createCapture } = await import('./capture.js');
     const capture = createCapture({ pc, app, director, demo, sound, relens: frameLens });
-    window.__sr = { capture, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
+    window.__sr = { capture, lamp, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
 }

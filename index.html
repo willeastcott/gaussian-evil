@@ -4,11 +4,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Gaussian Evil · a torch for Gaussian splats</title>
-    <meta name="description" content="Two people, captured in 3D as Gaussian splats, in the dark and the rain. You hold the torch. Runs in the browser, built with PlayCanvas.">
+    <meta name="description" content="Two people captured as Gaussian splats, relit live in your browser by a torch, in the dark and the rain. A homage to the greatest horror game of all time. Made with PlayCanvas.">
     <meta name="theme-color" content="#000000">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <!-- what a link to this page shows when it is shared: the picture is made from the scene
+         itself (src/capture.js, still()), and must be given in full, since it is fetched from elsewhere -->
     <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Gaussian Evil">
+    <meta property="og:url" content="https://willeastcott.github.io/gaussian-evil/">
     <meta property="og:title" content="Gaussian Evil">
-    <meta property="og:description" content="Two people, captured in 3D, in the dark and the rain. You hold the torch.">
+    <meta property="og:description" content="Two people captured as Gaussian splats, relit live in your browser by a torch, in the dark and the rain. A homage to the greatest horror game of all time. Made with PlayCanvas.">
+    <meta property="og:image" content="https://willeastcott.github.io/gaussian-evil/share.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Two people back to back in the rain under a lamp, lit by lightning, and the title Gaussian Evil">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Gaussian Evil">
+    <meta name="twitter:description" content="Two people captured as Gaussian splats, relit live in your browser by a torch, in the dark and the rain. A homage to the greatest horror game of all time. Made with PlayCanvas.">
+    <meta name="twitter:image" content="https://willeastcott.github.io/gaussian-evil/share.jpg">
     <style>
         /* Everything but the title is typewritten: the series saves its games at a typewriter, and
            types its captions. Courier New is on Windows, macOS and iOS; the rest are what Android
@@ -19,6 +33,12 @@
         canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='5.5' fill='none' stroke='%23fff' stroke-opacity='.5' stroke-width='1.2'/%3E%3C/svg%3E") 12 12, crosshair; }
         /* while the scene plays by itself there is no pointer on it, until the mouse is moved */
         body[data-phase="demo"]:not(.nudged) canvas { cursor: none; }
+        /* The film is letterboxed: two bars, which the script slides in and out (src/main.js sets
+           --bars, 0 out .. 1 in, and --bar, how tall they are). They lie over the canvas and under
+           everything else. */
+        .bar { position: fixed; left: 0; right: 0; height: var(--bar, 0px); background: #000; pointer-events: none; }
+        .bar.top { top: 0; transform: translateY(calc((var(--bars, 0) - 1) * 100%)); }
+        .bar.bottom { bottom: 0; transform: translateY(calc((1 - var(--bars, 0)) * 100%)); }
         button { font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; cursor: pointer; touch-action: manipulation; }
         button:focus-visible { outline: 1px solid rgba(232, 230, 225, 0.7); outline-offset: -4px; }
         a { color: inherit; }
@@ -26,6 +46,12 @@
         /* ---- the title card ---- */
         #title { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: #000; text-align: center; transition: opacity 1.4s ease; }
         #title.gone { opacity: 0; pointer-events: none; }
+        /* the way in has been taken, and the name is being said: everything but the name goes,
+           and the name comes slowly forward */
+        #title .lede, #title #gate, #title .note, #title .by { transition: opacity 0.6s ease; }
+        #title.speaking .lede, #title.speaking #gate, #title.speaking .note, #title.speaking .by { opacity: 0; pointer-events: none; }
+        #title h1 { transition: transform 4s cubic-bezier(0.2, 0.6, 0.3, 1); }
+        #title.speaking h1 { transform: scale(1.07, 1.391); }
         #title .card { animation: rise 1.8s ease 0.15s both; }
         @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
         /* the title: tall, condensed capitals in a chalky white, cracked and chipped (the #worn
@@ -87,11 +113,13 @@
         #info .links a:hover { text-decoration: underline; }
         @media (prefers-reduced-motion: reduce) { #info, #info.open { transition: none; } }
         [hidden] { display: none !important; }
-        @media (prefers-reduced-motion: reduce) { #title .card { animation: none; } }
+        @media (prefers-reduced-motion: reduce) { #title .card { animation: none; } #title h1 { transition: none; } }
     </style>
 </head>
 <body data-phase="title">
     <canvas id="app"></canvas>
+    <div class="bar top"></div>
+    <div class="bar bottom"></div>
 
     <div id="label" class="chrome">
         <b class="wordmark"><i>G</i>aussian <i>E</i>vil</b>
@@ -142,7 +170,7 @@
         <p>A splat has the light it was captured in baked into it, and no surface to shade. So a hidden mesh of the pair is built from the splats themselves and lit by ordinary lights. Every pixel of the splats is then multiplied by the light that falls on that mesh. That is what lets a torch light a photograph.</p>
 
         <h3>Shadows that are really cast</h3>
-        <p>The torch is a spot light with a shadow map, held just beside the lens. A second, more exact mesh casts the shadows: an arm across a face, the two of them across the ground. Lightning is another light, from a new part of the sky each time.</p>
+        <p>The torch is a spot light with a shadow map, held just beside the lens. A second, more exact mesh casts the shadows: an arm across a face, the two of them across the ground. Lightning is another light, from a new part of the sky each time, and the lamp behind them is a third: its shadows are drawn once, since nothing it lights ever moves.</p>
 
         <h3>Wet ground</h3>
         <p>The asphalt and its puddles are made in the shader. The reflection is a second, thinner copy of the splats standing upside down beneath the ground, lit to match and seen only where water lies. Rings from the rain bend it.</p>

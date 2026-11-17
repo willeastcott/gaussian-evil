@@ -72,6 +72,19 @@ float torchLight(vec3 p) {
     float reach = clamp(1.0 - dist / uTorchCone.z, 0.0, 1.0);
     return uTorchCone.w * cone * reach * reach;
 }
+
+// the same for the lamp that stands behind the pair (src/lamp.js)
+uniform vec3 uLampPos;
+uniform vec3 uLampDir;
+uniform vec4 uLampCone;     // cos inner, cos outer, range, intensity
+
+float lampLight(vec3 p) {
+    vec3 to = p - uLampPos;
+    float dist = length(to);
+    float cone = smoothstep(uLampCone.y, uLampCone.x, dot(to / dist, uLampDir));
+    float reach = clamp(1.0 - dist / uLampCone.z, 0.0, 1.0);
+    return uLampCone.w * cone * reach * reach;
+}
 `;
 
 export const TORCH_WGSL = /* wgsl */`
@@ -85,6 +98,19 @@ fn torchLight(p: vec3f) -> f32 {
     let cone = smoothstep(uniform.uTorchCone.y, uniform.uTorchCone.x, dot(to / dist, uniform.uTorchDir));
     let reach = clamp(1.0 - dist / uniform.uTorchCone.z, 0.0, 1.0);
     return uniform.uTorchCone.w * cone * reach * reach;
+}
+
+// the same for the lamp that stands behind the pair (src/lamp.js)
+uniform uLampPos: vec3f;
+uniform uLampDir: vec3f;
+uniform uLampCone: vec4f;     // cos inner, cos outer, range, intensity
+
+fn lampLight(p: vec3f) -> f32 {
+    let to = p - uniform.uLampPos;
+    let dist = length(to);
+    let cone = smoothstep(uniform.uLampCone.y, uniform.uLampCone.x, dot(to / dist, uniform.uLampDir));
+    let reach = clamp(1.0 - dist / uniform.uLampCone.z, 0.0, 1.0);
+    return uniform.uLampCone.w * cone * reach * reach;
 }
 `;
 
@@ -100,6 +126,7 @@ uniform vec4 uRainBox;      // half width, height, half depth, streak length (m)
 uniform vec4 uRainFall;     // wind x, fall speed (m/s), wind z, streak width (m)
 ${TORCH_GLSL}
 varying vec4 vShade;        // across, along, brightness from the torch, and from a flash
+varying float vLamp;        // brightness from the lamp
 
 void main(void) {
     float speed = uRainFall.y * vertex_normal.x;
@@ -123,6 +150,7 @@ void main(void) {
 
     gl_Position = matrix_viewProjection * vec4(pos, 1.0);
     vShade = vec4(vertex_texCoord0, torchLight(base) * vertex_normal.y, vertex_normal.y);
+    vLamp = lampLight(base) * vertex_normal.y;
 }
 `;
 
@@ -130,12 +158,14 @@ void main(void) {
 export const STREAK_FRAG_GLSL = /* glsl */`
 uniform vec3 uTorchColor;
 uniform vec3 uFlashColor;   // lightning: lights every drop, wherever it is
+uniform vec3 uLampColor;
 varying vec4 vShade;
+varying float vLamp;
 
 void main(void) {
     float edge = 1.0 - vShade.x * vShade.x;
     float tail = sin(vShade.y * 3.14159);
-    gl_FragColor = vec4((uTorchColor * vShade.z + uFlashColor * vShade.w) * (edge * tail), 1.0);
+    gl_FragColor = vec4((uTorchColor * vShade.z + uLampColor * vLamp + uFlashColor * vShade.w) * (edge * tail), 1.0);
 }
 `;
 
@@ -151,6 +181,7 @@ uniform uRainBox: vec4f;      // half width, height, half depth, streak length (
 uniform uRainFall: vec4f;     // wind x, fall speed (m/s), wind z, streak width (m)
 ${TORCH_WGSL}
 varying vShade: vec4f;        // across, along, brightness from the torch, and from a flash
+varying vLamp: f32;           // brightness from the lamp
 
 fn wrap(x: f32, size: f32) -> f32 {
     return x - size * floor(x / size);
@@ -183,6 +214,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 
     output.position = uniform.matrix_viewProjection * vec4f(pos, 1.0);
     output.vShade = vec4f(vertex_texCoord0, torchLight(base) * vertex_normal.y, vertex_normal.y);
+    output.vLamp = lampLight(base) * vertex_normal.y;
     return output;
 }
 `;
@@ -190,14 +222,16 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 export const STREAK_FRAG_WGSL = /* wgsl */`
 uniform uTorchColor: vec3f;
 uniform uFlashColor: vec3f;   // lightning: lights every drop, wherever it is
+uniform uLampColor: vec3f;
 varying vShade: vec4f;
+varying vLamp: f32;
 
 @fragment
 fn fragmentMain(input: FragmentInput) -> FragmentOutput {
     var output: FragmentOutput;
     let edge = 1.0 - input.vShade.x * input.vShade.x;
     let tail = sin(input.vShade.y * 3.14159);
-    output.color = vec4f((uniform.uTorchColor * input.vShade.z + uniform.uFlashColor * input.vShade.w) * (edge * tail), 1.0);
+    output.color = vec4f((uniform.uTorchColor * input.vShade.z + uniform.uLampColor * input.vLamp + uniform.uFlashColor * input.vShade.w) * (edge * tail), 1.0);
     return output;
 }
 `;
@@ -277,7 +311,10 @@ export function createRain({ app, camera, torch, aim }) {
         streak: 0.18,       // m: how far a drop travels while the shutter is open
         width: 0.003,       // m
         brightness: 0.35,
-        flash: [0, 0, 0]    // light on every drop from lightning; src/lightning.js sets it
+        flash: [0, 0, 0],   // light on every drop from lightning; src/lightning.js sets it
+        night: [0.012, 0.014, 0.019],   // and from the night itself: very little, but the dark is not empty
+        // the lamp behind the pair: where it is, which way it points, its cone, its colour. src/lamp.js sets it
+        lamp: { position: [0, 10, 0], direction: [0, -1, 0], cone: [0.9, 0.8, 1, 0], color: [0, 0, 0] }
     };
 
     const seeds = new Float32Array(settings.count * 5);
@@ -323,6 +360,8 @@ export function createRain({ app, camera, torch, aim }) {
             Math.cos(light.innerConeAngle * pc.math.DEG_TO_RAD), Math.cos(light.outerConeAngle * pc.math.DEG_TO_RAD),
             light.range, light.intensity * settings.brightness
         ];
+        const everywhere = settings.flash.map((c, i) => c + settings.night[i]);
+        const lamp = settings.lamp;
         for (const m of materials) {
             m.setParameter('uRainTime', time);
             m.setParameter('uRainEye', [eye.x, eye.y, eye.z]);
@@ -332,7 +371,11 @@ export function createRain({ app, camera, torch, aim }) {
             m.setParameter('uTorchDir', [dir.x, dir.y, dir.z]);
             m.setParameter('uTorchCone', cone);
             m.setParameter('uTorchColor', [light.color.r, light.color.g, light.color.b]);
-            m.setParameter('uFlashColor', settings.flash);
+            m.setParameter('uFlashColor', everywhere);
+            m.setParameter('uLampPos', lamp.position);
+            m.setParameter('uLampDir', lamp.direction);
+            m.setParameter('uLampCone', lamp.cone);
+            m.setParameter('uLampColor', lamp.color);
         }
     });
 

@@ -6,9 +6,9 @@
 //   the way in   dark; lightning shows the two of them from behind; the torch comes on at their
 //                feet and climbs to their faces
 //   her          close, and closing
-//   him          the same from a little below, cut to on a flash
+//   him          from further back and from below, cut to on a flash; the shortest shot
 //   the water    down by the ground: the beam comes across the puddles to their feet, and
-//                lightning fills the water with sky
+//                lightning fills the water with sky; the longest shot
 //   leaving      up and back, turning, until the torch goes out
 //
 // A shot is a run from one camera to another at a steady speed. The camera is already moving
@@ -77,19 +77,23 @@ export function createDemo({ wide, him, her }) {
     }, {
         name: 'him',
         at: 14,
-        from: camera(on(him, 0.07, -0.05), himYaw - 24, -7, 1.3),
-        to: camera(on(him, 0.07, -0.02), himYaw + 8, -3, 0.98),
-        hand: him.hand,
-        power: 0.7,
+        // Further back than hers, and from lower: his jacket and his pistol are in the shot, and
+        // he is not held as long. The torch is well out to the right of the lens and above it. Held
+        // beside the lens, as it is for a visitor, it lit his face flat from below; from here it
+        // models it, and the lamp, which is off to the left, fills the other side cold.
+        from: camera(on(him, 0.07, -0.2), himYaw - 20, -10, 1.7),
+        to: camera(on(him, 0.07, -0.14), himYaw + 2, -6, 1.35),
+        hand: v(1.5, 0.9, 0.1),
+        power: 0.8,
         blank: 0.08,
-        torch: [[0, on(him, 0.1, -0.3)], [0.45, on(him, 0.07, 0)], [1, on(him, 0.07, 0)]]
+        torch: [[0, on(him, 0.1, -0.35)], [0.5, on(him, 0.07, 0)], [1, on(him, 0.07, 0)]]
     }, {
         name: 'the water',
-        at: 20,
-        from: camera(v(0, 0.55, 0), -40, -6.5, 3.7),
-        to: camera(v(0, 0.75, 0), -14, -9, 3.0),
+        at: 18,
+        from: camera(v(0, 0.55, 0), -44, -6.5, 3.7),
+        to: camera(v(0, 0.75, 0), -10, -9, 3.0),
         hand: wide.hand,
-        torch: [[0, v(-1.0, 0, 0.9)], [0.45, v(-0.1, 0.02, 0.5)], [1, v(-0.05, 1.3, 0)]]
+        torch: [[0, v(-1.0, 0, 0.9)], [0.4, v(-0.1, 0.02, 0.5)], [0.85, v(-0.05, 1.3, 0)], [1, v(-0.05, 1.3, 0)]]
     }, {
         name: 'leaving',
         at: 27.5,
@@ -144,7 +148,7 @@ export function createDemo({ wide, him, her }) {
         strikes: [
             { at: 1.6, from: -110, height: 38, near: 0.92 },    // behind them and to the left: an outline
             { at: 14.08, from: -6, height: 45, near: 0.85 },    // on the cut to him, over her shoulder
-            { at: 23.4, from: -80, height: 28, near: 1 }        // low behind them: long shadows towards the camera
+            { at: 22.6, from: -80, height: 28, near: 1 }        // low behind them: long shadows towards the camera
         ],
         // something groans, far off (src/audio.js): when, and how loud in dB
         groans: [{ at: 11.4, level: -11 }, { at: 30.4, level: -8 }],

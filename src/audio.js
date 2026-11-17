@@ -12,6 +12,8 @@
 //     came from; a far one rumbles seconds later, quiet and dull
 //
 //   - the torch clicks when it is switched on (src/director.js)
+//   - the title is said aloud when the way in is taken (src/main.js), and under the title of
+//     the rendered video (src/capture.js)
 //   - and, very occasionally, something groans, a long way off in the dark. A minute or two
 //     apart, never the same one twice running, dulled and quiet as a far voice in rain is
 //
@@ -62,9 +64,12 @@ export function createSoundscape({ app, camera, rain, button }) {
         groanEvery: [70, 160]   // seconds between them after that
     };
 
+    let spoken = null;      // the title as it is said: how long the sound is, and when its last word ends
+
     // the files are fetched straight away; they can only be decoded once there is a context
     const files = fetch('audio/manifest.json').then(r => r.json()).then(async (manifest) => {
-        const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder), ...Object.keys(manifest.groans ?? {})];
+        const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder), ...Object.keys(manifest.groans ?? {}), ...Object.keys(manifest.voice ?? {})];
+        spoken = manifest.voice?.['title-voice'] ?? null;
         const data = await Promise.all(names.map(n => fetch(`audio/${n}.mp3`).then(r => r.arrayBuffer())));
         return Object.fromEntries(names.map((n, i) => [n, data[i]]));
     });
@@ -225,6 +230,26 @@ export function createSoundscape({ app, camera, rain, button }) {
         src.onended = () => setTimeout(() => { pan.disconnect(); echoGain.disconnect(); }, 600);
     }
 
+    /**
+     * The title, said aloud: the series says its own name on its title screen, and so does this.
+     *
+     * @param {number} [level] - How loud, in dB.
+     * @returns {number} How many seconds it takes to say (what is left after that is echo): 0 if
+     * there is nothing to say it with.
+     */
+    function announce(level = 1) {
+        const said = buffers['title-voice'];
+        if (!audible() || !said) return 0;
+        const src = ctx.createBufferSource();
+        src.buffer = said;
+        const gain = ctx.createGain();
+        gain.gain.value = dbToGain(level);
+        src.connect(gain).connect(master);
+        src.start(now() + 0.02);
+        src.onended = () => gain.disconnect();
+        return spoken?.ends ?? said.duration;
+    }
+
     function click() {
         if (!audible()) return;
         const t = now() + 0.01;
@@ -380,5 +405,5 @@ export function createSoundscape({ app, camera, rain, button }) {
         };
     }
 
-    return { settings, start, stop, click, groan, offline, meter, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
+    return { settings, start, stop, click, groan, announce, offline, meter, get spoken() { return spoken; }, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
 }

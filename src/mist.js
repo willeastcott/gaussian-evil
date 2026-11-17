@@ -54,6 +54,7 @@ const FRAG_GLSL = /* glsl */`
 uniform float uRainTime;
 uniform vec3 uTorchColor;
 uniform vec3 uFlashColor;
+uniform vec3 uLampColor;
 uniform vec4 uMist;         // brightness in the torch, in a flash, top of the mist (m), size of the wisps (1/m)
 uniform sampler2D uMistFigures;     // the lighting texture: alpha is the distance to the figures, 0 where there are none
 uniform vec4 uMistScreen;           // 1 / width, 1 / height of that texture; metres over which mist goes behind a figure; whether to look
@@ -86,7 +87,7 @@ void main(void) {
     float seen = 1.0 - uMistScreen.w * step(0.0001, figure) * smoothstep(0.0, uMistScreen.z, behind);
 
     float amount = body * wisps * lying * vMistSheet.w * seen;
-    vec3 light = uTorchColor * (torchLight(vMistWorld) * uMist.x) + uFlashColor * uMist.y;
+    vec3 light = (uTorchColor * torchLight(vMistWorld) + uLampColor * lampLight(vMistWorld)) * uMist.x + uFlashColor * uMist.y;
     gl_FragColor = vec4(light * amount, 1.0);
 }
 `;
@@ -136,6 +137,7 @@ const FRAG_WGSL = /* wgsl */`
 uniform uRainTime: f32;
 uniform uTorchColor: vec3f;
 uniform uFlashColor: vec3f;
+uniform uLampColor: vec3f;
 uniform uMist: vec4f;         // brightness in the torch, in a flash, top of the mist (m), size of the wisps (1/m)
 var uMistFigures: texture_2d<f32>;      // the lighting texture: alpha is the distance to the figures, 0 where there are none
 var uMistFiguresSampler: sampler;
@@ -178,7 +180,7 @@ fn fragmentMain(input: FragmentInput) -> FragmentOutput {
     let seen = 1.0 - screen.w * step(0.0001, figure) * smoothstep(0.0, screen.z, behind);
 
     let amount = body * wisps * lying * sheet.w * seen;
-    let light = uniform.uTorchColor * (torchLight(world) * mist.x) + uniform.uFlashColor * mist.y;
+    let light = (uniform.uTorchColor * torchLight(world) + uniform.uLampColor * lampLight(world)) * mist.x + uniform.uFlashColor * mist.y;
     output.color = vec4f(light * amount, 1.0);
     return output;
 }

@@ -83,9 +83,11 @@ On a screen held upright the lens widens from 40° to as much as 62° top to bot
 
 ### The film
 
-`src/demo.js` is the scene playing by itself: five shots cut together, 36.5 seconds, looping. Dark, and lightning shows the pair from behind; the torch comes on at their feet and climbs. Her, close. Him, cut to on a flash. Down by the water, where the beam comes across the puddles and lightning fills them with sky. Then up and back until the torch goes out. It ends and begins in the dark, so the loop has no seam, and a line there says how to take the torch.
+`src/demo.js` is the scene playing by itself: five shots cut together, 36.5 seconds, looping. Dark, and lightning shows the pair from behind; the torch comes on at their feet and climbs. Her, close. Him, cut to on a flash, from further back and lit from the side: the shortest shot. Down by the water, the longest, where the beam comes across the puddles and lightning fills them with sky. Then up and back until the torch goes out. It ends and begins in the dark, so the loop has no seam, and a line there says how to take the torch.
 
 It is for three things: a clip to share, which is how a demo like this travels; a screen left running; and the visitor who would sooner watch than steer. So there are four ways in: Enter on the title card (`?demo=0` makes Enter a short opening that hands the torch straight over), the play button or D once inside, `?demo` (no title card, and so no sound until somebody clicks), and the idle drift, which hands over to it after 35 seconds. Asked for, it runs until a click, a tap, Space, Enter or Escape; started by itself, moving the mouse is enough. Either way the camera is handed back where it stands. F still works, for a recording, and the pointer is hidden until the mouse moves.
+
+While the film plays the picture is letterboxed to 2.39:1, by two bars that slide in and out. The lens widens to match, so the band between them takes in, top to bottom, what the whole screen did: the bars add picture at the sides and crop nothing. When the torch is taken they slide away, the lens closes in, and the picture grows to fill the screen. A screen held upright has no bars, and the rendered video has none.
 
 A shot is a run from one camera to another at a steady speed, so the camera is already moving when a shot is cut to and still moving when it is cut from. A camera is written as the point it looks at and its bearing from that point, which makes the run an arc round the subject. The torch is written as the point in the world it lights; the director turns that into the point on screen that the torch is aimed through, and the distance, every frame. After a cut the beam is put on its mark at once. Up close the torch is turned down, or it burns a face out. Lightning comes on cue, so every run is the same.
 
@@ -96,6 +98,12 @@ One cut goes right round to the far side of the pair. With WebGL 2 the splats ar
 Every so often the whole scene is lit from somewhere else (`src/lightning.js`). A strike is a shadow-casting directional light from a new point of the sky each time, with a mirrored twin for the reflection. Its brightness follows real lightning: two or three strokes a tenth of a second apart, each at full strength at once and then dying away. The same level drives the sky (clear colour and fog), the ambient light, the sky mirrored in the puddles, and the rain and splashes, which are otherwise lit only by the torch. The lights run dark for the first few frames so their shaders are built during loading, not at the first flash.
 
 Flashing stays within the usual photosensitivity limit of three flashes a second, and with `prefers-reduced-motion` a strike is one slow swell.
+
+### The lamp, and the night
+
+Two lit figures in a black void say nothing about where they are, and when the torch is elsewhere nothing shows at all. So there is a lamp on a short mast a few metres behind them (`src/lamp.js`). It is an ordinary spot light on the same layers as the torch: cold where the torch is warm, and from behind, so it draws an edge of light round the pair and throws their shadows towards the camera. Its shadow map is drawn once, because neither it nor the mesh that casts the shadows ever moves; it costs about a millisecond a frame. A mirrored twin lights the reflections and a mirrored lens stands under the ground for the puddles to show. Rain and mist are lit in their own shaders, so they are told where the lamp is and the rain in its beam can always be seen. It stands that close because the rain is a box 8 m square about the pair. It flickers: mostly steady, with a short stutter every few seconds (never with `prefers-reduced-motion`). A soft halo, turned to the camera, keeps the lens from looking like a lit sign.
+
+The night itself is no longer quite black either: the sky is just light enough for the ground to end against, standing water shows as water, and every drop of rain carries a trace of light. Measured over the film, the picture had sat about 3% above black between flashes.
 
 ### Post effects
 
@@ -111,6 +119,7 @@ The scene is mostly black, so effects that only touch bright areas or corners ar
 - Wind is synthesised from filtered noise and follows the same gusts that move her hair and dress.
 - The torch clicks when it comes on: a tick of filtered noise with a short thump under it, synthesised.
 - Very occasionally something groans, a long way off: four recorded voices, never the same one twice running, one or two minutes apart. Each is slowed, dulled, set off to one side and given a late echo off the wet ground. The film asks for two of its own.
+- The title is said aloud when Enter is pressed, as the series says its own on its title screen: the card drops everything but the name and holds while a deep voice says it, then the film begins. It is text-to-speech (ElevenLabs), dropped three semitones, slowed a tenth and given a short echo by `tools/build-audio.mjs`. Three takes are kept, and the second is the one used; `TITLE_TAKE=a npm run audio` switches to another. The rendered video says it under its closing title, timed to end as the lightning strikes.
 - Thunder follows each lightning strike. Every strike has a distance, which sets how bright the flash is, how long the thunder takes to arrive (0.2 to 3.2 seconds), how loud and how dull it is, and which recording is used. It is panned to the side of the sky the bolt came from.
 
 The recordings come from the ElevenLabs sound-generation API through `npm run audio` (`tools/build-audio.mjs`). Raw takes are cached in `tools/audio-raw/`, so a rebuild needs no key. These generations often carry a steady buzz at 200 Hz and its harmonics, so the tool looks for any steady tone in each take, notches it out and checks again. A generated wind was buzz from 400 Hz to 13 kHz, which is why the wind is synthesised.
@@ -122,7 +131,7 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never, which also means the film never starts by itself), `?demo` to open on the film with no title card.
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never, which also means the film never starts by itself), `?demo` to open on the film with no title card, `?lamp=0` for no lamp.
 
 ## Render the film to a video
 
@@ -132,7 +141,9 @@ A screen recording drops frames, so the film is rendered instead (`src/capture.j
 npm run film
 ```
 
-joins them into `captures/gaussian-evil-film.mp4` (x264 CRF 18, AAC, sound brought to -18 LUFS by one fixed gain). The video runs 5.8 seconds past the end of the film, into the lightning that opens its loop: the title comes up in the dark, the flash shows the pair under it, and the credit for the capture is on screen. `run({ width: 1080, height: 1920 })` renders it upright.
+joins them into `captures/gaussian-evil-film.mp4` (x264 CRF 18, AAC, sound brought to -18 LUFS by one fixed gain). The video runs 5.8 seconds past the end of the film, into the lightning that opens its loop: the title comes up low in the picture, the flash shows the pair above it, and the credit for the capture is on screen.
+
+`__sr.capture.still()` makes that last flash into `captures/share.jpg`, the 1200 x 630 picture a shared link shows (`public/share.jpg`), and `__sr.capture.icons()` makes the page's icons. `run({ width: 1080, height: 1920 })` renders it upright.
 
 ## Rebuild the data
 

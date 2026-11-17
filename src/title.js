@@ -5,7 +5,7 @@
 // started from it.
 
 /**
- * @returns {object} progress(), ready() and dismiss().
+ * @returns {object} progress(), ready(), speak() and dismiss().
  */
 export function createTitle() {
     const root = document.getElementById('title');
@@ -37,6 +37,11 @@ export function createTitle() {
                 onEnter();
             }, { once: true });
             enter.focus({ preventScroll: true });
+        },
+
+        /** The way in has been taken: everything but the name leaves the card, while the name is said. */
+        speak() {
+            root.classList.add('speaking');
         },
 
         /** @param {string} why - Nothing more is going to happen: say so where the advice goes. */

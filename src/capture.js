@@ -8,7 +8,14 @@
 //
 // The film loops, and its loop opens on lightning showing the pair in outline. So the video runs
 // on past the end of the film into that: the title comes up in the dark, the flash shows the two
-// of them under it, and the torch is kept off while the thunder rolls away.
+// of them under it, and the torch is kept off while the thunder rolls away. The title is said
+// aloud as it comes up, so that the name ends just as the lightning strikes.
+//
+// The title stands low in the picture, over the wet ground: the top of it belongs to the lamp
+// and to the two of them.
+//
+// still() makes one frame of that ending into a picture, for a shared link to show, and icons()
+// the page's icons. Both go to captures/ too, to be copied into public/.
 //
 // From the console of a page opened with ?demo:   __sr.capture.run()   and watch __sr.capture.state.
 // A long run can be made in pieces, each in a fresh page: run({ start, end }) in frames, with
@@ -42,18 +49,20 @@ function wavFromBuffer(buf) {
  *
  * @param {number} W - Width of the video.
  * @param {number} H - Height of the video.
+ * @param {number} [wideness] - How far across the picture it reaches, 0..1.
+ * @param {number} [down] - How far down the picture its middle is, 0..1.
  * @returns {Promise<HTMLImageElement>} A picture the size of the video, clear but for the title.
  */
-async function titleImage(W, H) {
+async function titleImage(W, H, wideness = W > H ? 0.4 : 0.8, down = 0.815) {
     const SIZE = 104;       // px: the size the wear was drawn for (index.html)
     const probe = document.createElement('canvas').getContext('2d');
     probe.font = `${SIZE}px Impact`;
     const wide = probe.measureText('GAUSSIAN EVIL').width + 13 * SIZE * 0.01 + SIZE * 0.08;
-    // across a little under half of a wide picture, most of an upright one
-    const k = W * (W > H ? 0.46 : 0.82) / wide;
+    // across two fifths of a wide picture, most of an upright one
+    const k = W * wideness / wide;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
         <defs>${document.getElementById('worn').outerHTML}</defs>
-        <g transform="translate(${W / 2} ${H * (W > H ? 0.17 : 0.2)}) scale(${k} ${k * 1.3})">
+        <g transform="translate(${W / 2} ${H * down}) scale(${k} ${k * 1.3})">
             <text filter="url(#worn)" text-anchor="middle" dominant-baseline="central" font-family="Impact, Haettenschweiler, 'Arial Narrow', sans-serif" font-size="${SIZE}" letter-spacing="${SIZE * 0.01}" word-spacing="${SIZE * 0.08}" fill="#ebe8e2"><tspan fill="#c8141b">G</tspan>AUSSIAN <tspan fill="#c8141b">E</tspan>VIL</text>
         </g>
     </svg>`;
@@ -76,6 +85,38 @@ async function titleImage(W, H) {
 export function createCapture({ pc, app, director, demo, sound, relens }) {
     const device = app.graphicsDevice, canvas = device.canvas;
     const state = { running: false, phase: '', frame: 0, frames: 0, perSecond: 0, error: null, info: null };
+    const CSS = 1.5;        // drawn as on a screen with 1.5 device pixels to the pixel
+
+    // the engine's own loop stops: every frame from then on is asked for
+    const halt = () => {
+        if (app.frameRequestId) cancelAnimationFrame(app.frameRequestId);
+        app.frameRequestId = null;
+    };
+    // the canvas at exactly so many pixels, whatever the window is; and back again
+    const fix = (W, H) => {
+        document.body.classList.add('capturing');       // (no letterbox, and no lens widened for one: src/main.js)
+        device.maxPixelRatio = 1;
+        app.setCanvasFillMode(pc.FILLMODE_NONE, W / CSS, H / CSS);
+        app.setCanvasResolution(pc.RESOLUTION_FIXED, W, H);
+        relens();
+    };
+    const free = (ratio) => {
+        document.body.classList.remove('capturing');
+        device.maxPixelRatio = ratio;
+        app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+        app.setCanvasResolution(pc.RESOLUTION_AUTO);
+        relens();
+    };
+    const save = (file, blob) => fetch(`/__save?file=${file}`, { method: 'POST', body: blob });
+    const drawTitle = (g, title, alpha) => {
+        g.save();
+        g.globalAlpha = alpha;
+        g.shadowColor = 'rgba(0, 0, 0, 0.85)';
+        g.shadowBlur = 24;
+        g.shadowOffsetY = 3;
+        g.drawImage(title, 0, 0);
+        g.restore();
+    };
 
     /**
      * @param {object} [o] - Options.
@@ -95,23 +136,13 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
         if (state.running) return 'busy';
         Object.assign(state, { running: true, phase: 'setup', frame: 0, error: null });
         const was = { torchOn: demo.torchOn, ratio: device.maxPixelRatio, timeScale: app.timeScale };
-        const W = width, H = height, CSS = 1.5;       // drawn as on a screen with 1.5 device pixels to the pixel
+        const W = width, H = height;
         let track = null, rendered = false;
         try {
             if (director.phase !== 'demo') throw new Error('open the page with ?demo first');
             director.settings.deaf = true;
             app.timeScale = 1;
-            if (video) {
-                device.maxPixelRatio = 1;
-                app.setCanvasFillMode(pc.FILLMODE_NONE, W / CSS, H / CSS);
-                app.setCanvasResolution(pc.RESOLUTION_FIXED, W, H);
-                relens();
-            }
-            // the engine's own loop stops: every frame from here on is asked for
-            const halt = () => {
-                if (app.frameRequestId) cancelAnimationFrame(app.frameRequestId);
-                app.frameRequestId = null;
-            };
+            if (video) fix(W, H);
             halt();
 
             const total = Math.round((demo.length + after) * fps);
@@ -136,12 +167,12 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
                 g.shadowColor = 'rgba(0, 0, 0, 0.9)';
                 g.shadowBlur = 12 * u;
                 g.fillStyle = 'rgba(232, 230, 225, 0.82)';
-                g.font = `${30 * u}px "Courier New", Courier, monospace`;
-                g.fillText('A homage to the greatest horror game of all time. Made with PlayCanvas.', W / 2, H - 112 * u, W * 0.94);
+                g.font = `${27 * u}px "Courier New", Courier, monospace`;
+                g.fillText('A homage to the greatest horror game of all time. Made with PlayCanvas.', W / 2, H - 84 * u, W * 0.94);
                 g.fillStyle = 'rgba(232, 230, 225, 0.5)';
-                g.font = `${20 * u}px "Courier New", Courier, monospace`;
+                g.font = `${19 * u}px "Courier New", Courier, monospace`;
                 g.letterSpacing = `${1.2 * u}px`;
-                g.fillText('Capture: Adrian Cuesta, Dymensium (CC BY 4.0)   ·   superspl.at/scene/67841e9d', W / 2, H - 58 * u, W * 0.94);
+                g.fillText('Capture: Adrian Cuesta, Dymensium (CC BY 4.0)   ·   superspl.at/scene/67841e9d', W / 2, H - 44 * u, W * 0.94);
                 g.restore();
             };
 
@@ -181,12 +212,15 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
             halt();
             app.timeScale = 1;
 
+            // the frame at which the title starts to be said: so that its last word ends on the lightning
+            const sayAt = Math.round((demo.length + demo.strikes[0].at - (sound?.spoken?.ends ?? 2.5)) * fps);
             const WARM = 6;         // frames drawn, and thrown away, before the first of a later piece
             state.phase = 'frames';
             let since = performance.now(), sinceFrame = 0;
             for (let i = 0; i < frames; i++) {
                 // past the end of the film it would begin again: the torch stays off
                 if (i === film) demo.torchOn = Infinity;
+                if (i === sayAt && track) sound.announce();
                 if (!video || i < start - WARM) {
                     app.update(1 / fps);
                 } else {
@@ -198,15 +232,7 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
                         g.globalAlpha = 1;
                         g.drawImage(canvas, 0, 0, W, H);
                         const a = smooth(sat((t - titleAt) / 0.9));
-                        if (a > 0) {
-                            g.save();
-                            g.globalAlpha = a;
-                            g.shadowColor = 'rgba(0, 0, 0, 0.85)';
-                            g.shadowBlur = 24;
-                            g.shadowOffsetY = 3;
-                            g.drawImage(title, 0, 0);
-                            g.restore();
-                        }
+                        if (a > 0) drawTitle(g, title, a);
                         words(t);
                         const out = sat((t - fadeAt) / (seconds - fadeAt));
                         if (out > 0) {
@@ -252,12 +278,7 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
             if (track && !rendered) track.render().catch(() => {});
             demo.torchOn = was.torchOn;
             director.settings.deaf = false;
-            device.maxPixelRatio = was.ratio;
-            if (video) {
-                app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-                app.setCanvasResolution(pc.RESOLUTION_AUTO);
-                relens();
-            }
+            if (video) free(was.ratio);
             app.timeScale = was.timeScale;
             state.running = false;
             app.tick();     // the engine's loop again
@@ -265,5 +286,80 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
         return state.phase;
     }
 
-    return { run, state };
+    /**
+     * One frame as a picture with the title on it: by default the flash that ends the video, at
+     * the size a shared link shows.
+     *
+     * @param {object} [o] - Options.
+     * @param {string} [o.name] - The file is captures/<name>.
+     * @param {number} [o.width] - In pixels.
+     * @param {number} [o.height] - In pixels.
+     * @param {number} [o.at] - Seconds into the film: just after its first strike.
+     * @returns {Promise<string>} 'done' or what went wrong.
+     */
+    async function still({ name = 'share.jpg', width = 1200, height = 630, at = 1.62 } = {}) {
+        if (state.running) return 'busy';
+        state.running = true;
+        const was = { ratio: device.maxPixelRatio, timeScale: app.timeScale };
+        try {
+            if (director.phase !== 'demo') throw new Error('open the page with ?demo first');
+            director.settings.deaf = true;
+            app.timeScale = 1;
+            fix(width, height);
+            halt();
+            director.seek(demo.length - 1.5);
+            for (let k = 0; k < 180 && director.filmAt > 1; k++) app.update(1 / 60);
+            director.seek(0);
+            for (let k = 0; k < Math.round(at * 60); k++) app.update(1 / 60);
+            app.timeScale = 0;
+            for (let k = 0; k < 4; k++) {
+                app.tick();
+                halt();
+                await nextTask();
+            }
+            const comp = document.createElement('canvas');
+            comp.width = width; comp.height = height;
+            const g = comp.getContext('2d');
+            g.drawImage(canvas, 0, 0, width, height);
+            drawTitle(g, await titleImage(width, height, 0.46, 0.845), 1);
+            await save(name, await new Promise(resolve => comp.toBlob(resolve, 'image/jpeg', 0.9)));
+            return 'done';
+        } catch (e) {
+            return String(e?.stack || e);
+        } finally {
+            director.settings.deaf = false;
+            free(was.ratio);
+            app.timeScale = was.timeScale;
+            state.running = false;
+            app.tick();
+        }
+    }
+
+    /**
+     * The page's icons: the red G of the title on black, as captures/favicon.png and
+     * captures/apple-touch-icon.png.
+     *
+     * @returns {Promise<string>} 'done'.
+     */
+    async function icons() {
+        for (const [name, size] of [['favicon.png', 64], ['apple-touch-icon.png', 180]]) {
+            const c = document.createElement('canvas');
+            c.width = c.height = size;
+            const g = c.getContext('2d');
+            g.fillStyle = '#050608';
+            g.fillRect(0, 0, size, size);
+            g.fillStyle = '#c8141b';
+            g.textAlign = 'center';
+            g.textBaseline = 'alphabetic';
+            g.font = `${size * 0.66}px Impact, Haettenschweiler, "Arial Narrow", sans-serif`;
+            // tall, as the title is
+            g.translate(size / 2, size * 0.83);
+            g.scale(1, 1.3);
+            g.fillText('G', 0, 0);
+            await save(name, await new Promise(resolve => c.toBlob(resolve, 'image/png')));
+        }
+        return 'done';
+    }
+
+    return { run, still, icons, state };
 }

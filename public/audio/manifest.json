@@ -16,5 +16,11 @@
     "groan-b": 4,
     "groan-c": 2.963,
     "groan-d": 4.406
+  },
+  "voice": {
+    "title-voice": {
+      "length": 4.368,
+      "ends": 3.1
+    }
   }
 }

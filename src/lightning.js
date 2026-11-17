@@ -26,6 +26,10 @@ const SKY = [0.11, 0.14, 0.22];                     // the sky at the peak of a 
 const SKY_IN_WATER = [0.5, 0.6, 0.85];              // what the puddles mirror: the brighter sky overhead
 const FILL = [0.2, 0.24, 0.36];                     // added to the ambient light at the peak
 const RAIN = [0.26, 0.3, 0.4];                     // how brightly a flash lights a rain drop
+// Between strikes the night is not quite black: a sky just light enough for the ground to end
+// against, and for standing water to show as water.
+const NIGHT = [0.012, 0.016, 0.027];
+const NIGHT_IN_WATER = [0.03, 0.04, 0.062];
 
 /**
  * @param {object} o - What the lightning lights.
@@ -146,14 +150,14 @@ export function createLightning({ app, camera, layers, mirrorLayers, ground, rai
             mirrorBolt.light.intensity = settings.intensity * flash;
         }
 
-        sky.set(SKY[0] * flash, SKY[1] * flash, SKY[2] * flash);
+        sky.set(SKY[0] * flash + NIGHT[0], SKY[1] * flash + NIGHT[1], SKY[2] * flash + NIGHT[2]);
         camera.camera.clearColor = sky;
         app.scene.fog.color = sky;
         const dim = settings.ambient;
         ambient.set(ambientBase.r * dim + FILL[0] * flash, ambientBase.g * dim + FILL[1] * flash, ambientBase.b * dim + FILL[2] * flash);
         app.scene.ambientLight = ambient;
 
-        ground.settings.sky = SKY_IN_WATER.map(c => c * flash);
+        ground.settings.sky = SKY_IN_WATER.map((c, i) => c * flash + NIGHT_IN_WATER[i]);
         if (rain) rain.settings.flash = RAIN.map(c => c * flash);
     });
 

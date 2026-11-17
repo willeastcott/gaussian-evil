@@ -38,6 +38,7 @@ ${RAIN_LANDING_GLSL}
 ${TORCH_GLSL}
 ${GROUND_LIE_GLSL}
 varying vec4 vShade;        // across, along, brightness from the torch, and from a flash
+varying float vLamp;        // brightness from the lamp
 
 void main(void) {
     vec4 land = rainLanding(vertex_position.xyz, vertex_normal.x);
@@ -70,6 +71,7 @@ void main(void) {
     gl_Position = matrix_viewProjection * vec4(pos, 1.0);
     float bright = vertex_normal.y * uSplashOn.y * mix(uSplashOn.z, 1.0, water) * alive;
     vShade = vec4(vertex_texCoord0, torchLight(base) * bright, bright);
+    vLamp = lampLight(base) * bright;
 }
 `;
 
@@ -86,6 +88,7 @@ ${RAIN_LANDING_WGSL}
 ${TORCH_WGSL}
 ${GROUND_LIE_WGSL}
 varying vShade: vec4f;        // across, along, brightness from the torch, and from a flash
+varying vLamp: f32;           // brightness from the lamp
 
 @vertex
 fn vertexMain(input: VertexInput) -> VertexOutput {
@@ -126,6 +129,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
     output.position = uniform.matrix_viewProjection * vec4f(pos, 1.0);
     let bright = vertex_normal.y * on.y * mix(on.z, 1.0, water) * alive;
     output.vShade = vec4f(vertex_texCoord0, torchLight(base) * bright, bright);
+    output.vLamp = lampLight(base) * bright;
     return output;
 }
 `;
