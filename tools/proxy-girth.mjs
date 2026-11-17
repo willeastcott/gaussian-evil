@@ -1,10 +1,11 @@
-// How much fatter is the lighting proxy than the splats it stands in for?
+// How closely does the lighting proxy follow the splats it stands in for?
 //
 //   node tools/proxy-girth.mjs raw/scene.ply public/proxy.glb
 //
-// For every proxy vertex, the distance to the nearest opaque splat centre. The bodies are thin
-// shells of splats, so this is how far the mesh sits outside the surface you actually see.
-// Prints percentiles in centimetres, for the whole mesh and for the woman's forearms.
+// For every proxy vertex, the distance to the nearest opaque splat centre. The surface you see is
+// where the splats are, so this is how far the mesh sits from it (never quite zero: the opaque
+// splats are several millimetres apart). Prints percentiles in centimetres, for the whole mesh and
+// for the woman's forearms. ALPHA sets how opaque a splat must be to count (default 0.2).
 import fs from 'node:fs';
 
 const [, , plyPath, glbPath] = process.argv;

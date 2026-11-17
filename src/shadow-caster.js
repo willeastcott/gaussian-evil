@@ -1,40 +1,42 @@
-// Shadow caster: a slimmer copy of the lighting proxy.
+// The two meshes the lighting needs, both from the one baked proxy.
 //
-// The proxy mesh is deliberately fat. It has to cover every pixel the splats cover, or the splats
-// at a silhouette would find no lighting behind them, so it is baked about 2 cm outside the
-// surface you see (tools/proxy-girth.mjs measures it). That is right for receiving light and wrong
-// for blocking it: a forearm 4 cm too thick casts a shadow 4 cm too wide, and the extra shows up
-// as a black band along the limb's edge on whatever is behind it.
+// The baked mesh (tools/bake-proxy.mjs) is the figures' real surface: closed, solid, and within a
+// centimetre of the splats. That is the right mesh for blocking light, so it casts the shadows.
+// It lives on a layer no camera draws, which the lights still reach, so it gets into the shadow
+// maps and nothing else.
 //
-// So the fat mesh only receives. Shadows are cast by this copy, pulled in along its normals to
-// where the splats really are. It lives on a layer no camera draws, which the torch still lights,
-// so it reaches the shadow map and nothing else.
+// It is not quite the right mesh for receiving light. The lighting is looked up per pixel, and a
+// splat reaches a little past the surface it sits on, so at a silhouette some of a splat's pixels
+// would find no mesh behind them and go dark. The mesh that receives light is therefore a copy
+// grown outwards along its normals by about a centimetre. It casts nothing: a limb that much too
+// thick would throw a shadow that much too wide, which shows as a dark band along its edge.
 import * as pc from 'playcanvas';
 
 /**
  * @param {pc.GraphicsDevice} device - The device.
- * @param {pc.Mesh} source - The proxy mesh.
- * @param {number} shrink - How far to pull the surface in, in the mesh's own units.
- * @returns {pc.Mesh} The slimmer mesh.
+ * @param {pc.Mesh} source - The baked mesh.
+ * @param {number} grow - How far to push the surface out, in the mesh's own units.
+ * @returns {pc.Mesh} The grown mesh, with the same normals.
  */
-export function createCasterMesh(device, source, shrink) {
+export function createGrownMesh(device, source, grow) {
     const positions = [], normals = [], indices = [];
     source.getPositions(positions);
     source.getNormals(normals);
     source.getIndices(indices);
 
-    const slim = new Float32Array(positions.length);
-    for (let i = 0; i < slim.length; i++) slim[i] = positions[i] - normals[i] * shrink;
+    const grown = new Float32Array(positions.length);
+    for (let i = 0; i < grown.length; i++) grown[i] = positions[i] + normals[i] * grow;
 
     const mesh = new pc.Mesh(device);
-    mesh.setPositions(slim);
+    mesh.setPositions(grown);
+    mesh.setNormals(normals);
     mesh.setIndices(indices);
     mesh.update();
     return mesh;
 }
 
 /**
- * @param {pc.Mesh} mesh - From createCasterMesh.
+ * @param {pc.Mesh} mesh - The baked mesh.
  * @param {pc.Material} material - Any material; only its shadow pass is ever drawn.
  * @param {number[]} layers - Ids of the layers to put it on.
  * @returns {pc.Entity} An entity that casts the mesh's shadow.

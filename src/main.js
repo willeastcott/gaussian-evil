@@ -6,7 +6,7 @@
 // lighting at its own pixel. The same spot light also lights the ground, and a slimmer copy of
 // the proxy mesh casts the figures' shadows, on them and onto the ground.
 //
-// Query: ?device=webgl2|webgpu  ?proxy=1 (draw the proxy mesh over the splats)  ?proxy=2 (draw the shadow caster)  ?debug (stats)
+// Query: ?device=webgl2|webgpu  ?proxy=1 (draw the mesh that receives light over the splats)  ?proxy=2 (draw the baked mesh, which casts the shadows)  ?debug (stats)
 //        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
 import * as pc from 'playcanvas';
 import { CameraControls } from 'playcanvas/scripts/esm/camera-controls.mjs';
@@ -18,7 +18,7 @@ import { createLightning } from './lightning.js';
 import { createPost } from './post.js';
 import { createRain } from './rain.js';
 import { createSplashes } from './splash.js';
-import { createCasterEntity, createCasterMesh } from './shadow-caster.js';
+import { createCasterEntity, createGrownMesh } from './shadow-caster.js';
 import { createWetFloor } from './wet-floor.js';
 
 const query = new URLSearchParams(location.search);
@@ -30,7 +30,7 @@ const PLY_FLOOR_Y = 0.094;
 const PLY_CENTRE = [0.5, -1.0];        // x, z of the middle of the pair
 const CAMERA_MIN_HEIGHT = 0.12;        // metres: the camera stays this far above the ground
 const PITCH_DOWN = -80, PITCH_UP = 10; // degrees the orbit may look down and up
-const CASTER_SHRINK = 0.02;           // metres the proxy mesh stands outside the splats (tools/proxy-girth.mjs)
+const RECEIVER_GROW = 0.012;           // metres the mesh that receives light is grown beyond the baked surface
 
 // head centres in PLY space (tools/find-heads.mjs), the direction each close-up is shot from, and
 // where the torch is held (right, up, forward of the camera, at full reach). She aims a pistol
@@ -142,22 +142,27 @@ proxyMaterial.diffuse = new pc.Color(1, 1, 1);
 proxyMaterial.update();
 relighting.configureMaterial(proxyMaterial);
 
-// the proxy is fatter than the figures so that it covers every splat. It receives light but
-// casts no shadow: that is left to a slimmer copy (src/shadow-caster.js)
+// the baked mesh is the figures' real surface. A copy grown a little beyond it receives the
+// light, so that it covers every splat; the baked mesh itself casts the shadows
+// (src/shadow-caster.js)
 const proxy = assets.proxy.resource.instantiateRenderEntity();
+const surfaceMesh = proxy.findComponents('render')[0].meshInstances[0].mesh;
+const receiverMesh = createGrownMesh(device, surfaceMesh, RECEIVER_GROW / SCALE);
 const proxyLayers = query.get('proxy') === '1' ? [relightLayer.id, pc.LAYERID_WORLD] : [relightLayer.id];
 proxy.findComponents('render').forEach((render) => {
     render.layers = proxyLayers;
     render.castShadows = false;
     render.receiveShadows = true;
-    render.meshInstances.forEach((mi) => { mi.material = proxyMaterial; });
+    render.meshInstances.forEach((mi) => {
+        mi.mesh = receiverMesh;
+        mi.material = proxyMaterial;
+    });
 });
 stage.addChild(proxy);
 
 const casterLayer = new pc.Layer({ name: 'RelightingCasters' });
 app.scene.layers.push(casterLayer);
-const casterMesh = createCasterMesh(device, proxy.findComponents('render')[0].meshInstances[0].mesh, CASTER_SHRINK / SCALE);
-const caster = createCasterEntity(casterMesh, proxyMaterial, query.get('proxy') === '2' ? [casterLayer.id, pc.LAYERID_WORLD] : [casterLayer.id]);
+const caster = createCasterEntity(surfaceMesh, proxyMaterial, query.get('proxy') === '2' ? [casterLayer.id, pc.LAYERID_WORLD] : [casterLayer.id]);
 stage.addChild(caster);
 
 // ---- ground: wet asphalt with puddles (src/ground.js). Three things are drawn in order: the
@@ -235,7 +240,7 @@ app.on('update', updateTorch);
 // ---- wet floor: the figures reflected in it ----
 const wet = query.get('wet') === '0' ? null : createWetFloor({
     app, stage, plyFloorY: PLY_FLOOR_Y, mirrorAsset: assets.mirror, proxyAsset: assets.proxy, proxyMaterial,
-    casterMesh, camera, relightLayer, reflectionLayer, torch, aim: state.aim
+    receiverMesh, casterMesh: surfaceMesh, camera, relightLayer, reflectionLayer, torch, aim: state.aim
 });
 if (wet && query.get('life') === '0') wet.settings.life = 0;
 
