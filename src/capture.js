@@ -141,7 +141,7 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
                 g.fillStyle = 'rgba(232, 230, 225, 0.5)';
                 g.font = `${21 * u}px "Segoe UI", "Helvetica Neue", sans-serif`;
                 g.letterSpacing = `${1.2 * u}px`;
-                g.fillText('Capture: Adrian Cuesta, Dymensium (CC BY 4.0)', W / 2, H - 58 * u, W * 0.94);
+                g.fillText('Capture: Adrian Cuesta, Dymensium (CC BY 4.0)   ·   superspl.at/scene/67841e9d', W / 2, H - 58 * u, W * 0.94);
                 g.restore();
             };
 

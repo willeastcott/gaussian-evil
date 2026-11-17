@@ -150,5 +150,4 @@ npx splat-transform -w raw/mirror-dec.ply public/mirror.sog
 
 ## Credit
 
-Capture: "Resident Evil - (Video in description)" by Adrian Cuesta, Dymensium volumetric capture
-(https://superspl.at/scene/67841e9d), licensed CC BY 4.0. The performers are Mike Galeck and Beatriz Olcina.
+Capture: ["Resident Evil - (Video in description)"](https://superspl.at/scene/67841e9d) by Adrian Cuesta, Dymensium volumetric capture, on SuperSplat, licensed CC BY 4.0. The performers are Mike Galeck and Beatriz Olcina.
