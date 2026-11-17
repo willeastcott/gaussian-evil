@@ -42,7 +42,9 @@ Flashing stays within the usual photosensitivity limit of three flashes a second
 
 ### Post effects
 
-`src/post.js` adds a glow around what is bright, a vignette and film grain. The engine's own effects (`CameraFrame`) are not used: they draw the scene into a linear-light target, so splats blend in linear light, which turns dark cloth grey. Here the camera draws exactly as it would to the screen, only into an 8-bit texture, and a second camera that owns no geometry runs six full-screen passes over it: keep what is brighter than a threshold at a quarter of the size, blur that tightly, blur it again at an eighth of the size for a wide halo, then add both glows back as light and finish with the vignette and grain. It costs about a millisecond a frame.
+`src/post.js` adds a glow around what is bright, a colour grade, a touch of lens and film grain. The engine's own effects (`CameraFrame`) are not used: they draw the scene into a linear-light target, so splats blend in linear light, which turns dark cloth grey. Here the camera draws exactly as it would to the screen, only into an 8-bit texture, and a second camera that owns no geometry runs full-screen passes over it: keep what is brighter than a threshold at a quarter of the size, blur that tightly, again at an eighth of the size for a wide halo and again at a sixteenth for a haze, then a finishing pass. The finish parts red and blue slightly towards the edges as a lens would, adds the three glows back as light, grades the picture (cool shadows, warm highlights, a faint cold veil so the dark is never quite black), and applies the vignette and grain. It costs about two milliseconds a frame.
+
+The scene is mostly black, so effects that only touch bright areas or corners are close to invisible: the first version changed the picture by 1.5 levels in 255 on average. The veil, the lower glow threshold and the haze are what make the effects register.
 
 ### Sound
 

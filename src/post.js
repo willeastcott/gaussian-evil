@@ -1,4 +1,4 @@
-// Post effects: a glow around what is bright, a darkening towards the corners, and film grain.
+// Post effects: a glow around what is bright, a colour grade, a touch of lens, and film grain.
 //
 // The engine's own effects (CameraFrame) are not used. They draw the scene into a linear-light
 // target, so splats blend in linear light, which is not how a capture was trained and turns dark
@@ -7,8 +7,11 @@
 //
 //   bright   the picture, reduced to a quarter of its size, keeping only what is brighter than a
 //            threshold (a torch highlight, a lit streak of rain, a lightning flash)
-//   blur     that, blurred: once tightly, and once more at an eighth of the size for a wide halo
-//   finish   the picture plus the two glows, added as light; then the vignette and the grain
+//   blur     that, blurred: tightly, again at an eighth of the size for a wide halo, and again at
+//            a sixteenth for a haze
+//   finish   the picture, its red and blue parted slightly towards the edges as a lens would,
+//            plus the three glows, added as light; then the grade (more contrast, cool shadows,
+//            warm highlights), a faint cold veil in the dark, the vignette and the grain
 //
 // The picture is stored with gamma applied, as it is on screen, so light is added by decoding it,
 // adding, and encoding again.
@@ -119,8 +122,10 @@ const FINISH_GLSL = /* glsl */`
 uniform sampler2D postSource;
 uniform sampler2D postGlowTight;
 uniform sampler2D postGlowWide;
+uniform sampler2D postGlowHaze;
 uniform vec4 uPostLook;         // glow, vignette, grain, time
-uniform vec4 uPostGrain;        // size of a grain in pixels, frames of grain a second, spare
+uniform vec4 uPostGrain;        // size of a grain in pixels, frames of grain a second, lens fringe, contrast
+uniform vec4 uPostTone;         // the veil left in the dark (r, g, b), strength of the toning
 varying vec2 ndc;
 
 vec3 toLinear(vec3 c) { return pow(max(c, vec3(0.0)), vec3(2.2)); }
@@ -133,17 +138,33 @@ float postHash(vec2 p) {
 
 void main(void) {
     vec2 uv = getImageEffectUV(ndc * 0.5 + 0.5);
-    vec3 glow = texture2D(postGlowTight, uv).rgb * 0.55 + texture2D(postGlowWide, uv).rgb * 0.45;
-    vec3 c = toScreen(toLinear(texture2D(postSource, uv).rgb) + glow * uPostLook.x);
+
+    // the lens: towards the edges red lands a little further out than green, and blue further in
+    vec2 fringe = ndc * dot(ndc, ndc) * uPostGrain.z;
+    vec3 scene = vec3(
+        texture2D(postSource, getImageEffectUV((ndc + fringe) * 0.5 + 0.5)).r,
+        texture2D(postSource, uv).g,
+        texture2D(postSource, getImageEffectUV((ndc - fringe) * 0.5 + 0.5)).b);
+
+    // the glow, from a tight halo to a haze a tenth of the picture wide, added as light
+    vec3 glow = texture2D(postGlowTight, uv).rgb * 0.4 + texture2D(postGlowWide, uv).rgb * 0.35 + texture2D(postGlowHaze, uv).rgb * 0.25;
+    vec3 c = min(toScreen(toLinear(scene) + glow * uPostLook.x), vec3(1.0));
+
+    // the grade: a little more contrast, the shadows turned cool and the highlights warm
+    c = mix(c, c * c * (3.0 - 2.0 * c), uPostGrain.w);
+    float level = dot(c, vec3(0.299, 0.587, 0.114));
+    c *= mix(vec3(1.0), mix(vec3(0.88, 1.0, 1.14), vec3(1.07, 1.0, 0.9), smoothstep(0.12, 0.65, level)), uPostTone.w);
+
+    // rain hangs in the air, so the dark is never quite black: a faint cold veil
+    c += uPostTone.rgb * (1.0 - level) * (1.0 - level);
 
     // darker towards the corners
-    c *= 1.0 - uPostLook.y * smoothstep(0.5, 1.5, length(ndc));
+    c *= 1.0 - uPostLook.y * smoothstep(0.35, 1.4, length(ndc));
 
     // grain: a new pattern several times a second, a little stronger in the shadows
     vec2 cell = floor(gl_FragCoord.xy / uPostGrain.x);
     float frame = floor(uPostLook.w * uPostGrain.y);
     float n = postHash(cell + frame * 7.31) + postHash(cell * 1.37 + frame * 3.17) - 1.0;
-    float level = dot(c, vec3(0.299, 0.587, 0.114));
     c += n * uPostLook.z * (1.25 - 0.85 * clamp(level, 0.0, 1.0));
 
     gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
@@ -157,8 +178,11 @@ var postGlowTight: texture_2d<f32>;
 var postGlowTightSampler: sampler;
 var postGlowWide: texture_2d<f32>;
 var postGlowWideSampler: sampler;
+var postGlowHaze: texture_2d<f32>;
+var postGlowHazeSampler: sampler;
 uniform uPostLook: vec4f;         // glow, vignette, grain, time
-uniform uPostGrain: vec4f;        // size of a grain in pixels, frames of grain a second, spare
+uniform uPostGrain: vec4f;        // size of a grain in pixels, frames of grain a second, lens fringe, contrast
+uniform uPostTone: vec4f;         // the veil left in the dark (r, g, b), strength of the toning
 varying ndc: vec2f;
 
 fn toLinear(c: vec3f) -> vec3f { return pow(max(c, vec3f(0.0)), vec3f(2.2)); }
@@ -172,18 +196,39 @@ fn postHash(p: vec2f) -> f32 {
 @fragment fn fragmentMain(input: FragmentInput) -> FragmentOutput {
     var output: FragmentOutput;
     let look = uniform.uPostLook;
-    let uv = getImageEffectUV(input.ndc * 0.5 + 0.5);
-    let glow = textureSampleLevel(postGlowTight, postGlowTightSampler, uv, 0.0).rgb * 0.55 + textureSampleLevel(postGlowWide, postGlowWideSampler, uv, 0.0).rgb * 0.45;
-    var c = toScreen(toLinear(textureSampleLevel(postSource, postSourceSampler, uv, 0.0).rgb) + glow * look.x);
+    let grain = uniform.uPostGrain;
+    let tone = uniform.uPostTone;
+    let at = input.ndc;
+    let uv = getImageEffectUV(at * 0.5 + 0.5);
+
+    // the lens: towards the edges red lands a little further out than green, and blue further in
+    let fringe = at * dot(at, at) * grain.z;
+    let scene = vec3f(
+        textureSampleLevel(postSource, postSourceSampler, getImageEffectUV((at + fringe) * 0.5 + 0.5), 0.0).r,
+        textureSampleLevel(postSource, postSourceSampler, uv, 0.0).g,
+        textureSampleLevel(postSource, postSourceSampler, getImageEffectUV((at - fringe) * 0.5 + 0.5), 0.0).b);
+
+    // the glow, from a tight halo to a haze a tenth of the picture wide, added as light
+    let glow = textureSampleLevel(postGlowTight, postGlowTightSampler, uv, 0.0).rgb * 0.4 +
+               textureSampleLevel(postGlowWide, postGlowWideSampler, uv, 0.0).rgb * 0.35 +
+               textureSampleLevel(postGlowHaze, postGlowHazeSampler, uv, 0.0).rgb * 0.25;
+    var c = min(toScreen(toLinear(scene) + glow * look.x), vec3f(1.0));
+
+    // the grade: a little more contrast, the shadows turned cool and the highlights warm
+    c = mix(c, c * c * (3.0 - 2.0 * c), grain.w);
+    let level = dot(c, vec3f(0.299, 0.587, 0.114));
+    c = c * mix(vec3f(1.0), mix(vec3f(0.88, 1.0, 1.14), vec3f(1.07, 1.0, 0.9), smoothstep(0.12, 0.65, level)), tone.w);
+
+    // rain hangs in the air, so the dark is never quite black: a faint cold veil
+    c = c + tone.rgb * (1.0 - level) * (1.0 - level);
 
     // darker towards the corners
-    c = c * (1.0 - look.y * smoothstep(0.5, 1.5, length(input.ndc)));
+    c = c * (1.0 - look.y * smoothstep(0.35, 1.4, length(at)));
 
     // grain: a new pattern several times a second, a little stronger in the shadows
-    let cell = floor(pcPosition.xy / uniform.uPostGrain.x);
-    let frame = floor(look.w * uniform.uPostGrain.y);
+    let cell = floor(pcPosition.xy / grain.x);
+    let frame = floor(look.w * grain.y);
     let n = postHash(cell + frame * 7.31) + postHash(cell * 1.37 + frame * 3.17) - 1.0;
-    let level = dot(c, vec3f(0.299, 0.587, 0.114));
     c = c + n * look.z * (1.25 - 0.85 * clamp(level, 0.0, 1.0));
 
     output.color = vec4f(clamp(c, vec3f(0.0), vec3f(1.0)), 1.0);
@@ -221,12 +266,16 @@ class QuadPass extends pc.RenderPassShaderQuad {
  */
 export function createPost({ app, camera }) {
     const settings = {
-        glow: 0.55,             // strength of the glow
-        threshold: 0.5,         // linear brightness above which a thing glows
-        knee: 0.3,              // how gradually it starts
-        vignette: 0.42,         // how much darker the corners are
-        grain: 0.022,           // strength of the grain
-        grainSize: 1.5,         // in device pixels
+        glow: 0.8,              // strength of the glow
+        threshold: 0.25,        // linear brightness above which a thing glows
+        knee: 0.2,              // how gradually it starts
+        contrast: 0.06,         // 0 leaves the tones alone, 1 is a full S-curve (which buries a dark scene)
+        toning: 0.45,           // cool shadows and warm highlights
+        veil: [0.010, 0.016, 0.030],    // what is left in the dark, on screen (1 is white)
+        fringe: 0.0025,         // how far red and blue part at the middle of an edge, in half-widths
+        vignette: 0.5,          // how much darker the corners are
+        grain: 0.04,            // strength of the grain
+        grainSize: 2,           // in device pixels
         grainRate: 24           // new patterns a second
     };
     const device = app.graphicsDevice;
@@ -260,6 +309,7 @@ export function createPost({ app, camera }) {
     const target = name => new pc.RenderTarget({ colorBuffer: texture(name), depth: false });
     const quarter = [target('PostQuarterA'), target('PostQuarterB')];
     const eighth = [target('PostEighthA'), target('PostEighthB')];
+    const sixteenth = [target('PostSixteenthA'), target('PostSixteenthB')];
 
     let time = 0;
     app.on('update', (dt) => { time += dt; });
@@ -286,13 +336,20 @@ export function createPost({ app, camera }) {
     // and widely, at an eighth: the taps are twice as far apart on the way down
     blur(quarter[0], eighth[0], 0.125, 2, 0);
     blur(eighth[0], eighth[1], 0.125, 0, 1);
+    // and as a haze, at a sixteenth, blurred twice over
+    blur(eighth[1], sixteenth[0], 0.0625, 2, 0);
+    blur(sixteenth[0], sixteenth[1], 0.0625, 0, 1);
+    blur(sixteenth[1], sixteenth[0], 0.0625, 1.5, 0);
+    blur(sixteenth[0], sixteenth[1], 0.0625, 0, 1.5);
 
     add('PostFinish', FINISH_GLSL, FINISH_WGSL, null, 1, (put) => {
         put('postSource', scene);
         put('postGlowTight', quarter[0].colorBuffer);
         put('postGlowWide', eighth[1].colorBuffer);
+        put('postGlowHaze', sixteenth[1].colorBuffer);
         put('uPostLook', [settings.glow, settings.vignette, settings.grain, time]);
-        put('uPostGrain', [settings.grainSize, settings.grainRate, 0, 0]);
+        put('uPostGrain', [settings.grainSize, settings.grainRate, settings.fringe, settings.contrast]);
+        put('uPostTone', [settings.veil[0], settings.veil[1], settings.veil[2], settings.toning]);
     });
 
     // a second camera owns no geometry: it only runs the passes, the last of them into the canvas
