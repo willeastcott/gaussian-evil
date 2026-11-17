@@ -1,8 +1,16 @@
-# splat-resident-evil
+# gaussian-evil
 
-A Gaussian splat capture of two people, relit in real time by a hand-held torch. Prototype, built with PlayCanvas.
+A Gaussian splat capture of two people, in the dark and the rain, relit in real time by a torch that you hold. Built with PlayCanvas.
 
-Move the pointer to aim the torch, drag to orbit, scroll to zoom. Space (or the Relighting button) switches the relighting off to show the capture as shot. Lightning strikes every 7 to 16 seconds; L fires a strike at once. Sound starts with your first click or key press, and the Sound button turns it off. The Effects button (or P) switches the post effects off and on.
+It opens on a title card. Enter, and there is darkness and rain; lightning shows the two of them for an instant; then the torch clicks on at their feet, climbs to their faces, and is yours.
+
+| | Mouse | Touch |
+|---|---|---|
+| Aim the torch | move the pointer | turn the phone, or tap |
+| Look around | drag | drag |
+| Zoom | scroll | pinch |
+
+Along the bottom: three shots (Both, Him, Her), lightning now (L), the capture as it was shot, without the torch (Space), sound, and full screen (F). P switches the post effects off and on. Lightning also strikes by itself every 7 to 16 seconds. Leave it alone for 25 seconds and the camera and the torch drift by themselves until you touch something.
 
 ## How it works
 
@@ -57,6 +65,18 @@ The rain (`src/rain.js`) is one mesh of thin quads rather than splats, lit in it
 
 Each drop splashes where it lands (`src/splash.js`). Nothing is simulated on the CPU: a drop's path is a pure function of its seed and the time, so the place and moment it hits the ground are too, and the splash shaders work them out for the same drops. A landing throws up a few droplets on ballistic arcs, a small crown in a puddle and a lower, shorter spray on asphalt. A landing in a puddle also sends out a ring, cut off at the puddle's edge. A ring is seen mostly by what it does to the reflection: it is drawn after the engine's scene colour grab, and re-draws the water under it from that picture at a point shifted by the wave's slope. Its crests also catch a glint of the torch.
 
+### The visit
+
+`src/director.js` gives a visit its shape: title card, opening, the torch handed over, and a drift when nobody is steering. Two things change hands between the script and the visitor.
+
+The camera. While the script has it, the engine's orbit controls are switched off and the camera is placed directly; handing it back is `controls.focusPoint = ...`, which makes the controls take up the camera from wherever it stands, so there is never a jump. Moves between the three shots are flown the same way, round whatever the camera is looking at, over a second or two. (The controls' own move is over in a fifth of a second: with fly mode off they ignore `focusDamping` and use the damping meant for drags.)
+
+The torch. The point on screen it aims at is a mix of where the script points it and where the visitor does, and the mix slides from one to the other. `src/aim.js` supplies the visitor's half: the pointer under a mouse; the last tap on a touch screen, since a drag there turns the camera; and on a phone that reports its orientation, the direction its back is facing, as a torch held in the hand would point. That direction is worked out from all three angles together, which keeps it steady with the phone upright, where two of them fight over the same turn. A turn of the phone moves the beam 1.6 times as far across the view, and a beam held against the edge of the screen does not wind up.
+
+The title card (`src/title.js`) is there for more than looks. A browser will not play sound, nor an iPhone report its orientation, until something has been clicked, so the way in is a button and both are started from it. The scene is already drawing behind the card, dark, so the first frames, which build shaders and sort the splats, are over before anything is seen. The bar shows bytes: the splat loader reports its progress.
+
+On a screen held upright the lens widens from 40° to as much as 62° top to bottom, to keep the same width in view: the two of them stand side by side, and from the same place a phone would cut off his elbow and her pistol.
+
 ### Lightning
 
 Every so often the whole scene is lit from somewhere else (`src/lightning.js`). A strike is a shadow-casting directional light from a new point of the sky each time, with a mirrored twin for the reflection. Its brightness follows real lightning: two or three strokes a tenth of a second apart, each at full strength at once and then dying away. The same level drives the sky (clear colour and fog), the ambient light, the sky mirrored in the puddles, and the rain and splashes, which are otherwise lit only by the torch. The lights run dark for the first few frames so their shaders are built during loading, not at the first flash.
@@ -75,6 +95,7 @@ The scene is mostly black, so effects that only touch bright areas or corners ar
 
 - Rain is three recorded textures at once: drops on asphalt, drops in puddles, and the wash of rain further off. Each loops with a crossfade made on the decoded samples, starts at its own point, runs at a slightly different speed and drifts a couple of decibels on its own cycle. The puddles come forward when the camera is down near the water.
 - Wind is synthesised from filtered noise and follows the same gusts that move her hair and dress.
+- The torch clicks when it comes on: a tick of filtered noise with a short thump under it, synthesised.
 - Thunder follows each lightning strike. Every strike has a distance, which sets how bright the flash is, how long the thunder takes to arrive (0.2 to 3.2 seconds), how loud and how dull it is, and which recording is used. It is panned to the side of the sky the bolt came from.
 
 The recordings come from the ElevenLabs sound-generation API through `npm run audio` (`tools/build-audio.mjs`). Raw takes are cached in `tools/audio-raw/`, so a rebuild needs no key. These generations often carry a steady buzz at 200 Hz and its harmonics, so the tool looks for any steady tone in each take, notches it out and checks again. A generated wind was buzz from 400 Hz to 13 kHz, which is why the wind is synthesised.
@@ -86,7 +107,7 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off.
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never).
 
 ## Rebuild the data
 

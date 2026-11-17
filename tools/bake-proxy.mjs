@@ -427,7 +427,7 @@ const push = (array, target) => {
     return bufferViews.length - 1;
 };
 const json = {
-    asset: { version: '2.0', generator: 'splat-resident-evil bake-proxy' },
+    asset: { version: '2.0', generator: 'gaussian-evil bake-proxy' },
     scene: 0,
     scenes: [{ nodes: meshes.map((_, i) => i) }],
     nodes: meshes.map((m, i) => ({ mesh: i, name: m.name })),

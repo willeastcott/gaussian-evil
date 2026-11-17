@@ -35,7 +35,7 @@ const RAIN = [0.26, 0.3, 0.4];                     // how brightly a flash light
  * @param {number[]|null} o.mirrorLayers - The same for the reflected figures, if there are any.
  * @param {object} o.ground - From createGround: its puddles mirror the sky.
  * @param {object|null} o.rain - From createRain: the drops catch the flash.
- * @returns {object} Settings, strike() to fire one now, and the lights.
+ * @returns {object} Settings, strike() to fire one now, defer() to put the next one off, and the lights.
  */
 export function createLightning({ app, camera, layers, mirrorLayers, ground, rain }) {
     const settings = {
@@ -43,6 +43,7 @@ export function createLightning({ app, camera, layers, mirrorLayers, ground, rai
         every: [7, 16],         // seconds between strikes: shortest, longest
         first: 4,               // seconds before the first
         height: [35, 65],       // degrees above the horizon it comes from
+        ambient: 1,             // the ambient light between strikes, as a fraction of the scene's own
         enabled: true
     };
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -83,15 +84,20 @@ export function createLightning({ app, camera, layers, mirrorLayers, ground, rai
         entity.rotateLocal(90, 0, 0);
     };
 
-    function strike() {
-        const azimuth = Math.random() * Math.PI * 2;
-        const height = pc.math.lerp(settings.height[0], settings.height[1], Math.random()) * pc.math.DEG_TO_RAD;
+    /**
+     * @param {object} [o] - A strike is random unless told otherwise.
+     * @param {number} [o.azimuth] - Where round the sky it comes from, in radians (0 is +x, 90° is +z).
+     * @param {number} [o.height] - Degrees above the horizon.
+     * @param {number} [o.near] - 1 is right on top of us, 0 a kilometre off.
+     */
+    function strike(o = {}) {
+        const azimuth = o.azimuth ?? Math.random() * Math.PI * 2;
+        const height = (o.height ?? pc.math.lerp(settings.height[0], settings.height[1], Math.random())) * pc.math.DEG_TO_RAD;
         from.set(Math.cos(azimuth) * Math.cos(height), Math.sin(height), Math.sin(azimuth) * Math.cos(height)).mulScalar(20);
         aimAt(bolt, from.x, from.y, from.z);
         if (mirrorBolt) aimAt(mirrorBolt, from.x, -from.y, from.z);
 
-        // 1 is right on top of us, 0 a kilometre off
-        const near = Math.random();
+        const near = o.near ?? Math.random();
         const power = 0.4 + 0.6 * near;
 
         strokes = [];
@@ -143,12 +149,18 @@ export function createLightning({ app, camera, layers, mirrorLayers, ground, rai
         sky.set(SKY[0] * flash, SKY[1] * flash, SKY[2] * flash);
         camera.camera.clearColor = sky;
         app.scene.fog.color = sky;
-        ambient.set(ambientBase.r + FILL[0] * flash, ambientBase.g + FILL[1] * flash, ambientBase.b + FILL[2] * flash);
+        const dim = settings.ambient;
+        ambient.set(ambientBase.r * dim + FILL[0] * flash, ambientBase.g * dim + FILL[1] * flash, ambientBase.b * dim + FILL[2] * flash);
         app.scene.ambientLight = ambient;
 
         ground.settings.sky = SKY_IN_WATER.map(c => c * flash);
         if (rain) rain.settings.flash = RAIN.map(c => c * flash);
     });
 
-    return { settings, strike, bolt, mirrorBolt, get level() { return level(); } };
+    /** @param {number} seconds - The next strike that comes by itself is this far off. */
+    const defer = (seconds) => {
+        next = clock + seconds;
+    };
+
+    return { settings, strike, defer, bolt, mirrorBolt, get level() { return level(); } };
 }

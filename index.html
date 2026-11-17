@@ -3,40 +3,109 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Splat Resident Evil · a torch for Gaussian splats</title>
-    <meta name="description" content="A Gaussian splat capture of two people, relit in real time by a hand-held torch. Built with PlayCanvas.">
+    <title>Gaussian Evil · a torch for Gaussian splats</title>
+    <meta name="description" content="Two people, captured in 3D as Gaussian splats, in the dark and the rain. You hold the torch. Runs in the browser, built with PlayCanvas.">
     <meta name="theme-color" content="#000000">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Gaussian Evil">
+    <meta property="og:description" content="Two people, captured in 3D, in the dark and the rain. You hold the torch.">
     <style>
-        :root { color-scheme: dark; --ink: #e8e6e1; }
-        html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); -webkit-user-select: none; user-select: none; }
-        canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-        #bar { position: fixed; left: 12px; top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
-        button { font: inherit; color: var(--ink); background: rgba(20, 20, 22, 0.72); border: 1px solid rgba(232, 230, 225, 0.22); border-radius: 6px; padding: 6px 10px; cursor: pointer; touch-action: manipulation; }
-        button:hover { border-color: rgba(232, 230, 225, 0.55); }
-        button[aria-pressed="true"] { background: rgba(232, 230, 225, 0.9); color: #111; }
-        #hint, #credit { position: fixed; left: 12px; right: 12px; pointer-events: none; opacity: 0.6; text-shadow: 0 1px 4px #000; }
-        #hint { bottom: 30px; }
-        #credit { bottom: 10px; font-size: 11px; }
-        #credit a { color: inherit; pointer-events: auto; }
-        #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #000; transition: opacity 0.6s; }
-        #loading.done { opacity: 0; pointer-events: none; }
+        :root { color-scheme: dark; --ink: #e8e6e1; --dim: rgba(232, 230, 225, 0.58); --faint: rgba(232, 230, 225, 0.4); }
+        html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #000; font: 13px/1.4 "Helvetica Neue", "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--ink); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        /* the pointer is the torch: all it needs is a small ring to say where it is */
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='5.5' fill='none' stroke='%23fff' stroke-opacity='.5' stroke-width='1.2'/%3E%3C/svg%3E") 12 12, crosshair; }
+        button { font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; cursor: pointer; touch-action: manipulation; }
+        button:focus-visible { outline: 1px solid rgba(232, 230, 225, 0.7); outline-offset: -4px; }
+        a { color: inherit; }
+
+        /* ---- the title card ---- */
+        #title { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: #000; text-align: center; transition: opacity 1.4s ease; }
+        #title.gone { opacity: 0; pointer-events: none; }
+        #title .card { animation: rise 1.8s ease 0.15s both; }
+        @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        #title h1 { margin: 0; font-weight: 300; font-size: clamp(19px, 4.4vw, 46px); line-height: 1.25; letter-spacing: 0.34em; text-indent: 0.34em; text-transform: uppercase; }
+        #title .lede { margin: 20px 0 46px; font: italic 400 clamp(14px, 1.6vw, 18px)/1.6 Georgia, "Times New Roman", serif; color: var(--dim); }
+        #gate { display: grid; place-items: center; height: 46px; }
+        #gate > * { grid-area: 1 / 1; transition: opacity 0.7s ease; }
+        /* (faded out, the bar still lies across the middle of the button: it must not take the click) */
+        #progress { width: min(220px, 56vw); height: 1px; background: rgba(232, 230, 225, 0.16); pointer-events: none; }
+        #progress i { display: block; width: 0; height: 100%; background: var(--ink); transition: width 0.3s linear; }
+        #enter { opacity: 0; pointer-events: none; padding: 14px 32px 14px calc(32px + 0.32em); border: 1px solid rgba(232, 230, 225, 0.4); font-size: 12px; letter-spacing: 0.32em; text-transform: uppercase; transition: opacity 0.7s ease, border-color 0.2s, background 0.2s, color 0.2s; }
+        #enter:hover, #enter:focus-visible { background: var(--ink); border-color: var(--ink); color: #000; outline: none; }
+        #title.ready #progress, #title.failed #progress { opacity: 0; }
+        #title.failed .note { color: var(--ink); letter-spacing: 0.06em; text-transform: none; font-size: 13px; }
+        #title.ready #enter { opacity: 1; pointer-events: auto; }
+        #title .note { min-height: 1.4em; margin: 20px 0 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+        #title .by { position: absolute; left: 16px; right: 16px; bottom: max(14px, env(safe-area-inset-bottom)); margin: 0; font-size: 11px; color: var(--faint); }
+
+        /* ---- on screen once the torch is yours; gone again while the scene drifts on its own ---- */
+        .chrome { opacity: 0; transition: opacity 1.4s ease; }
+        body[data-phase="live"] .chrome { opacity: 1; }
+        #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 18px; top: max(16px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
+        #label b { display: block; font-weight: 400; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--dim); }
+        #label small { display: block; margin-top: 6px; font-size: 11px; color: var(--faint); }
+        body[data-phase="live"] #label a { pointer-events: auto; }
+        #hud { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end; padding: 40px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent); pointer-events: none; }
+        #hud nav, #hud div { display: flex; align-items: center; }
+        #hud button { display: grid; place-items: center; min-width: 44px; height: 44px; padding: 0 12px; color: var(--dim); transition: color 0.2s; }
+        body[data-phase="live"] #hud button { pointer-events: auto; }
+        #hud button:hover, #hud button:focus-visible { color: #fff; }
+        #hud nav button { font-size: 11px; letter-spacing: 0.22em; text-indent: 0.22em; text-transform: uppercase; }
+        #hud svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+        #sound[aria-pressed="true"] .off, #sound[aria-pressed="false"] .on { display: none; }
+        #relight[aria-pressed="false"] { color: #fff; }
+        #relight .half { fill: currentColor; stroke: none; }
+        #hint { position: fixed; left: 16px; right: 16px; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 60px); margin: 0; text-align: center; font-size: 12px; letter-spacing: 0.1em; text-shadow: 0 1px 6px #000; opacity: 0; transition: opacity 1s ease; pointer-events: none; }
+        #hint.on { opacity: 0.85; }
         #stats { position: fixed; right: 12px; top: 12px; opacity: 0.6; font-variant-numeric: tabular-nums; text-align: right; white-space: pre; pointer-events: none; }
+        [hidden] { display: none !important; }
+        @media (prefers-reduced-motion: reduce) { #title .card { animation: none; } }
     </style>
 </head>
-<body>
+<body data-phase="title">
     <canvas id="app"></canvas>
-    <div id="bar">
-        <button id="relight" aria-pressed="true">Relighting</button>
-        <button data-view="wide">Wide</button>
-        <button data-view="him">His face</button>
-        <button data-view="her">Her face</button>
-        <button id="sound" aria-pressed="false">Sound</button>
-        <button id="post" aria-pressed="true">Effects</button>
+
+    <div id="label" class="chrome">
+        <b>Gaussian Evil</b>
+        <small>Capture: <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">Adrian Cuesta, Dymensium</a> (CC BY 4.0) · relit live with PlayCanvas</small>
     </div>
+
+    <div id="hud" class="chrome">
+        <nav aria-label="Camera">
+            <button data-view="wide">Both</button>
+            <button data-view="him">Him</button>
+            <button data-view="her">Her</button>
+        </nav>
+        <div>
+            <button id="strike" title="Lightning (L)" aria-label="Lightning">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>
+            </button>
+            <button id="relight" title="Compare with the capture as it was shot (Space)" aria-label="Torch light" aria-pressed="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="half" d="M12 3a9 9 0 0 0 0 18z"/></svg>
+            </button>
+            <button id="sound" title="Sound" aria-label="Sound" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path class="on" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path class="off" d="m22 9-6 6m0-6 6 6"/></svg>
+            </button>
+            <button id="fullscreen" title="Full screen (F)" aria-label="Full screen">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+        </div>
+    </div>
+    <p id="hint" role="status"></p>
     <div id="stats"></div>
-    <div id="hint">Move the pointer to aim the torch · drag to orbit · scroll to zoom · L for lightning</div>
-    <div id="credit">Capture: <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">Adrian Cuesta, Dymensium</a> (CC BY 4.0) · relit in real time with PlayCanvas</div>
-    <div id="loading">Loading…</div>
+
+    <div id="title">
+        <div class="card">
+            <h1>Gaussian Evil</h1>
+            <p class="lede">Two people, captured in 3D.<br>It is dark, and it is raining.<br>You hold the torch.</p>
+            <div id="gate">
+                <div id="progress" role="progressbar" aria-label="Loading"><i></i></div>
+                <button id="enter" disabled>Enter</button>
+            </div>
+            <p class="note"></p>
+        </div>
+        <p class="by">Capture: Adrian Cuesta, Dymensium (CC BY 4.0) · made with PlayCanvas</p>
+    </div>
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>

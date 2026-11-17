@@ -11,8 +11,11 @@
 //     gives it: a near strike cracks almost at once, loud and bright, from the side of the sky it
 //     came from; a far one rumbles seconds later, quiet and dull
 //
+//   - the torch clicks when it is switched on (src/director.js)
+//
 // A browser will not play sound until the page has been clicked or a key pressed, so the first
-// such gesture starts it; the Sound button turns it off and on.
+// such gesture starts it (the way in on the title card, src/title.js, is one); the Sound button
+// turns it off and on.
 //
 // There is no compressor in the chain: Web Audio's adds make-up gain of its own, which once
 // lifted a quiet bed by 18 dB. Levels are set by plain gains and checked with the meter below.
@@ -156,6 +159,39 @@ export function createSoundscape({ app, camera, rain, button }) {
     }
     app.on('lightning:strike', thunder);
 
+    // the switch on the torch: a sharp tick, with a little of the body of the torch under it.
+    // Made here, like the wind: it is forty milliseconds long
+    function click() {
+        if (!on || !ctx || ctx.state !== 'running') return;
+        const t = ctx.currentTime + 0.01;
+
+        const n = Math.floor(ctx.sampleRate * 0.05), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+        const tick = ctx.createBufferSource();
+        tick.buffer = buf;
+        const band = ctx.createBiquadFilter();
+        band.type = 'bandpass';
+        band.frequency.value = 2800;
+        band.Q.value = 1.5;
+        const tickGain = ctx.createGain();
+        tickGain.gain.setValueAtTime(0.5, t);
+        tickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+        tick.connect(band).connect(tickGain).connect(master);
+        tick.start(t);
+        tick.stop(t + 0.05);
+
+        const body = ctx.createOscillator();
+        body.frequency.setValueAtTime(190, t);
+        body.frequency.exponentialRampToValueAtTime(90, t + 0.06);
+        const bodyGain = ctx.createGain();
+        bodyGain.gain.setValueAtTime(0.22, t);
+        bodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        body.connect(bodyGain).connect(master);
+        body.start(t);
+        body.stop(t + 0.1);
+        body.onended = () => bodyGain.disconnect();
+    }
+
     const data = new Float32Array(2048);
     const meter = { rmsDb: -Infinity, peakDb: -Infinity, peakHoldDb: -Infinity };
 
@@ -187,6 +223,8 @@ export function createSoundscape({ app, camera, rain, button }) {
 
     const show = () => button?.setAttribute('aria-pressed', String(on));
 
+    // resolves once everything is decoded and playing, whichever call got there first
+    let building = null;
     async function start() {
         on = true;
         show();
@@ -198,8 +236,9 @@ export function createSoundscape({ app, camera, rain, button }) {
             analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
             master.connect(analyser).connect(ctx.destination);
-            await build();
+            building = build();
         }
+        await building;
         await ctx.resume();
         master.gain.cancelScheduledValues(ctx.currentTime);
         master.gain.setTargetAtTime(on ? settings.volume : 0, ctx.currentTime, 0.8);
@@ -226,5 +265,5 @@ export function createSoundscape({ app, camera, rain, button }) {
     button?.addEventListener('click', () => (on ? stop() : start()));
     show();
 
-    return { settings, start, stop, meter, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
+    return { settings, start, stop, click, meter, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
 }

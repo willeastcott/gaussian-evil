@@ -1,7 +1,7 @@
 {
-  "name": "splat-resident-evil",
+  "name": "gaussian-evil",
   "version": "0.1.0",
-  "description": "Prototype: a Gaussian splat capture of two people, relit in real time by a hand-held torch. Built with PlayCanvas.",
+  "description": "A Gaussian splat capture of two people, in the dark and the rain, relit in real time by a torch that you hold. Built with PlayCanvas.",
   "private": true,
   "type": "module",
   "scripts": {
