@@ -77,7 +77,7 @@
         /* ---- on screen once the torch is yours; gone again while the scene drifts on its own ---- */
         .chrome { opacity: 0; transition: opacity 1.4s ease; }
         body[data-phase="live"] .chrome { opacity: 1; }
-        /* the name, in a row as high as a button. (The credits are in the panel that the last button of the bottom row opens.) */
+        /* the name, in a row as high as a button. (The credits are in the panel that the i button in the bottom row opens.) */
         #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 18px; top: max(8px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
         #label b { display: block; height: 44px; font-weight: 400; font-size: clamp(26px, 2.8vw, 34px); line-height: 44px; letter-spacing: 0.04em; white-space: nowrap; opacity: 0.85; }
         /* under the name: what it is made with, and that engine's own mark, in the red of the name's G and E */
@@ -153,14 +153,14 @@
             <button id="relight" title="Compare with the capture as it was shot (Space)" aria-label="Torch light" aria-pressed="true">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="half" d="M12 3a9 9 0 0 0 0 18z"/></svg>
             </button>
+            <button id="about" title="How it works (I)" aria-label="How it works" aria-expanded="false" aria-controls="info">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.6"/><path class="stem" d="M12 11.2v5.6"/><circle class="dot" cx="12" cy="7.4" r="1.4"/></svg>
+            </button>
             <button id="sound" title="Sound" aria-label="Sound" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path class="on" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path class="off" d="m22 9-6 6m0-6 6 6"/></svg>
             </button>
             <button id="fullscreen" title="Full screen (F)" aria-label="Full screen">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-            </button>
-            <button id="about" title="How it works (I)" aria-label="How it works" aria-expanded="false" aria-controls="info">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.6"/><path class="stem" d="M12 11.2v5.6"/><circle class="dot" cx="12" cy="7.4" r="1.4"/></svg>
             </button>
         </div>
     </div>
