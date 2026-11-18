@@ -543,22 +543,26 @@ if (query.has('demo') && query.get('demo') !== '0') {
     const film = query.get('demo') !== '0';
     title.ready(aim.touch ? 'Sound on · tap to take the torch' : 'Best with sound · click to take the torch', () => {
         // inside the click: sound may start, and an iPhone may be asked which way it is facing
-        const audible = sound ? sound.start().catch(() => {}) : Promise.resolve();
+        sound?.start().catch(() => {});
         aim.enableTilt();
         // everything but the name leaves the card at once: the click has been heard
         title.speak();
-        // what follows waits for the sound to be decoded, but not for long: the thunder is part of it
-        Promise.race([audible, new Promise(resolve => setTimeout(resolve, 2500))]).then(() => {
-            // The name is said aloud over the title, as the series says its own on its title
-            // screen, and the card stays up until the last word is nearly out. (With no sound, it
-            // goes at once.)
-            const said = sound?.announce() ?? 0;
+        // The boom and the voice are decoded first, and that is all this waits for: a moment.
+        // (The rain and the thunder are ready long before the voice has finished.)
+        Promise.race([sound ? sound.primed : Promise.resolve(), new Promise(resolve => setTimeout(resolve, 2500))]).then(() => {
+            // One ominous boom, and then the name is said aloud over the title, as the series says
+            // its own on its title screen. The card stays up until the last word is nearly out.
+            // (With no sound, it goes at once.)
+            const lead = sound?.hit() ?? 0;
             setTimeout(() => {
-                title.dismiss();
-                if (!film) return director.begin();
-                director.watch();
-                setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
-            }, Math.max(0, said - 0.3) * 1000);
+                const said = sound?.announce() ?? 0;
+                setTimeout(() => {
+                    title.dismiss();
+                    if (!film) return director.begin();
+                    director.watch();
+                    setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
+                }, Math.max(0, said - 0.3) * 1000);
+            }, lead * 1000);
         });
     });
 }

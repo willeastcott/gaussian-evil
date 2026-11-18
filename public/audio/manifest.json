@@ -22,5 +22,11 @@
       "length": 4.368,
       "ends": 3.1
     }
+  },
+  "hit": {
+    "enter-hit": {
+      "length": 7,
+      "lead": 0.9
+    }
   }
 }

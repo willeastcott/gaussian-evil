@@ -12,8 +12,8 @@
 //     came from; a far one rumbles seconds later, quiet and dull
 //
 //   - the torch clicks when it is switched on (src/director.js)
-//   - the title is said aloud when the way in is taken (src/main.js), and under the title of
-//     the rendered video (src/capture.js)
+//   - when the way in is taken (src/main.js) there is one ominous boom, and then the title is said
+//     aloud. It is said again under the title of the rendered video (src/capture.js)
 //   - and, very occasionally, something groans, a long way off in the dark. A minute or two
 //     apart, never the same one twice running, dulled and quiet as a far voice in rain is
 //
@@ -43,6 +43,7 @@ const THUNDER = {
     far: ['thunder-far-a', 'thunder-mid-a']
 };
 const GROANS = ['groan-a', 'groan-b', 'groan-c', 'groan-d'];
+const FIRST = ['enter-hit', 'title-voice'];       // what is played the moment the way in is taken
 const dbToGain = db => Math.pow(10, db / 20);
 
 /**
@@ -65,11 +66,13 @@ export function createSoundscape({ app, camera, rain, button }) {
     };
 
     let spoken = null;      // the title as it is said: how long the sound is, and when its last word ends
+    let struck = null;      // the boom on the way in: how long it is, and how long it has to itself
 
     // the files are fetched straight away; they can only be decoded once there is a context
     const files = fetch('audio/manifest.json').then(r => r.json()).then(async (manifest) => {
-        const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder), ...Object.keys(manifest.groans ?? {}), ...Object.keys(manifest.voice ?? {})];
+        const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder), ...Object.keys(manifest.groans ?? {}), ...Object.keys(manifest.voice ?? {}), ...Object.keys(manifest.hit ?? {})];
         spoken = manifest.voice?.['title-voice'] ?? null;
+        struck = manifest.hit?.['enter-hit'] ?? null;
         const data = await Promise.all(names.map(n => fetch(`audio/${n}.mp3`).then(r => r.arrayBuffer())));
         return Object.fromEntries(names.map((n, i) => [n, data[i]]));
     });
@@ -121,9 +124,14 @@ export function createSoundscape({ app, camera, rain, button }) {
 
     async function build() {
         const raw = await files;
-        await Promise.all(Object.entries(raw).map(async ([name, data]) => {
-            buffers[name] = await ctx.decodeAudioData(data.slice(0));
-        }));
+        const decode = async (name) => {
+            if (raw[name]) buffers[name] = await ctx.decodeAudioData(raw[name].slice(0));
+        };
+        // What is played on the way in comes first: a boom that answers a button has to come at
+        // once, not when a minute of rain has been decoded as well.
+        await Promise.all(FIRST.map(decode));
+        primedNow();
+        await Promise.all(Object.keys(raw).filter(name => !FIRST.includes(name)).map(decode));
 
         for (const [name, b] of Object.entries(BEDS)) {
             if (!buffers[name]) continue;
@@ -231,6 +239,26 @@ export function createSoundscape({ app, camera, rain, button }) {
     }
 
     /**
+     * One ominous boom: the way in has been taken.
+     *
+     * @param {number} [level] - How loud, in dB.
+     * @returns {number} Seconds to leave before anything is said over it: 0 if there is nothing
+     * to play it with.
+     */
+    function hit(level = 0) {
+        const boom = buffers['enter-hit'];
+        if (!audible() || !boom) return 0;
+        const src = ctx.createBufferSource();
+        src.buffer = boom;
+        const gain = ctx.createGain();
+        gain.gain.value = dbToGain(level);
+        src.connect(gain).connect(master);
+        src.start(now() + 0.02);
+        src.onended = () => gain.disconnect();
+        return struck?.lead ?? 0.9;
+    }
+
+    /**
      * The title, said aloud: the series says its own name on its title screen, and so does this.
      *
      * @param {number} [level] - How loud, in dB.
@@ -317,6 +345,10 @@ export function createSoundscape({ app, camera, rain, button }) {
 
     // resolves once everything is decoded and playing, whichever call got there first
     let building = null;
+    let never = true;       // it has not been started before
+    // resolves as soon as the sounds of the way in can be played, which is long before that
+    let primedNow = () => {};
+    const primed = new Promise((resolve) => { primedNow = resolve; });
     async function start() {
         if (offlineAt >= 0) return;
         on = true;
@@ -325,7 +357,10 @@ export function createSoundscape({ app, camera, rain, button }) {
             started = true;
             ctx = new AudioContext();
             master = ctx.createGain();
-            master.gain.value = 0;
+            // The first time, it is there at once: the rain and the wind come up by themselves,
+            // and what is played on the way in (a boom, and the title said aloud) must not be
+            // played into a fade. The title's first word used to be.
+            master.gain.value = settings.volume;
             analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
             master.connect(analyser).connect(ctx.destination);
@@ -333,8 +368,12 @@ export function createSoundscape({ app, camera, rain, button }) {
         }
         await building;
         await ctx.resume();
-        master.gain.cancelScheduledValues(ctx.currentTime);
-        master.gain.setTargetAtTime(on ? settings.volume : 0, ctx.currentTime, 0.8);
+        // turned back on, it comes up gently
+        if (!never) {
+            master.gain.cancelScheduledValues(ctx.currentTime);
+            master.gain.setTargetAtTime(on ? settings.volume : 0, ctx.currentTime, 0.8);
+        }
+        never = false;
     }
 
     function stop() {
@@ -405,5 +444,5 @@ export function createSoundscape({ app, camera, rain, button }) {
         };
     }
 
-    return { settings, start, stop, click, groan, announce, offline, meter, get spoken() { return spoken; }, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
+    return { settings, start, stop, click, groan, hit, announce, offline, primed, meter, get spoken() { return spoken; }, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
 }
