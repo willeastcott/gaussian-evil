@@ -12,7 +12,7 @@
 //     came from; a far one rumbles seconds later, quiet and dull
 //
 //   - the torch clicks when it is switched on (src/director.js)
-//   - when the way in is taken (src/main.js) there is one ominous boom, and then the title is said
+//   - when the way in is taken (src/main.js) the title is said
 //     aloud. It is said again under the title of the rendered video (src/capture.js)
 //   - and, very occasionally, something groans, a long way off in the dark. A minute or two
 //     apart, never the same one twice running, dulled and quiet as a far voice in rain is
@@ -43,15 +43,43 @@ const THUNDER = {
     far: ['thunder-far-a', 'thunder-mid-a']
 };
 const GROANS = ['groan-a', 'groan-b', 'groan-c', 'groan-d'];
-const FIRST = ['enter-hit', 'title-voice'];       // what is played the moment the way in is taken
+const FIRST = ['title-voice'];       // what is played the moment the way in is taken
 
 // A new context says it is running at once, but the machine's sound output is not open yet: on a
 // laptop it took 0.4 s (its clock stood still, then jumped). What is played in that time is
-// lost, or faded in with the output: a boom, which is all attack, came out with its start cut
-// off. So nothing is played on the way in until this much sound (seconds: silence) has really
+// lost, or faded in with the output: a boom that used to be played on the way in, which was all attack, came
+// out with its start cut off. So nothing is played on the way in until this much sound (seconds: silence) has really
 // gone out, by the context's own account of what has reached the output.
-const SETTLE = 0.05;
+//
+// That was not enough: the boom still lost its start. An output that is being sent silence may
+// as well not be open: sound hardware (a laptop's amplifier, a wireless headset) sleeps through
+// silence, and wakes, fading in, on the first sound that is not. So the context is given
+// something to play from the moment it is made, far too quiet to hear (see prime()), and the
+// boom waits until 0.15 s of that has gone out.
+const SETTLE = 0.15;
+const PRIMER_DB = -66;      // how loud the noise is that keeps the output awake
+const PRIMER_FOR = 4;       // seconds: by then the rain is playing, which does the same
 const OPEN_BY = 1200;       // milliseconds: if it has not opened by then, there is no knowing when
+
+/**
+ * Plays noise too quiet to hear, straight to the output, for the first few seconds of a context.
+ *
+ * @param {AudioContext} ctx - A context, just made.
+ */
+function prime(ctx) {
+    const buffer = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.5), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = Math.pow(10, PRIMER_DB / 20);
+    src.connect(gain).connect(ctx.destination);
+    src.start();
+    src.stop(ctx.currentTime + PRIMER_FOR);
+    src.onended = () => gain.disconnect();
+}
 
 /**
  * @param {AudioContext} ctx - A context, just made.
@@ -91,13 +119,11 @@ export function createSoundscape({ app, camera, rain, button }) {
     };
 
     let spoken = null;      // the title as it is said: how long the sound is, and when its last word ends
-    let struck = null;      // the boom on the way in: how long it is, and how long it has to itself
 
     // the files are fetched straight away; they can only be decoded once there is a context
     const files = fetch('audio/manifest.json').then(r => r.json()).then(async (manifest) => {
         const names = [...(rain ? Object.keys(manifest.beds) : []), ...Object.keys(manifest.thunder), ...Object.keys(manifest.groans ?? {}), ...Object.keys(manifest.voice ?? {}), ...Object.keys(manifest.hit ?? {})];
         spoken = manifest.voice?.['title-voice'] ?? null;
-        struck = manifest.hit?.['enter-hit'] ?? null;
         const data = await Promise.all(names.map(n => fetch(`audio/${n}.mp3`).then(r => r.arrayBuffer())));
         return Object.fromEntries(names.map((n, i) => [n, data[i]]));
     });
@@ -266,26 +292,6 @@ export function createSoundscape({ app, camera, rain, button }) {
     }
 
     /**
-     * One ominous boom: the way in has been taken.
-     *
-     * @param {number} [level] - How loud, in dB.
-     * @returns {number} Seconds to leave before anything is said over it: 0 if there is nothing
-     * to play it with.
-     */
-    function hit(level = 0) {
-        const boom = buffers['enter-hit'];
-        if (!audible() || !boom) return 0;
-        const src = ctx.createBufferSource();
-        src.buffer = boom;
-        const gain = ctx.createGain();
-        gain.gain.value = dbToGain(level);
-        src.connect(gain).connect(master);
-        src.start(now() + 0.02);
-        src.onended = () => gain.disconnect();
-        return struck?.lead ?? 0.9;
-    }
-
-    /**
      * The title, said aloud: the series says its own name on its title screen, and so does this.
      *
      * @param {number} [level] - How loud, in dB.
@@ -392,6 +398,7 @@ export function createSoundscape({ app, camera, rain, button }) {
             analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
             master.connect(analyser).connect(ctx.destination);
+            prime(ctx);
             building = build();
         }
         // (asked for here, inside the click or the tap: a context made on a touch that was not
@@ -495,5 +502,5 @@ export function createSoundscape({ app, camera, rain, button }) {
         };
     }
 
-    return { settings, start, stop, click, groan, hit, announce, offline, primed, meter, get spoken() { return spoken; }, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
+    return { settings, start, stop, click, groan, announce, offline, primed, meter, get spoken() { return spoken; }, get running() { return !!ctx && ctx.state === 'running' && on; }, get context() { return ctx; } };
 }

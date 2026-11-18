@@ -78,7 +78,9 @@ const TITLE_VOICE = {
 // as menace: slower, darker, with something in the tail.) `carry` adds overtones for small
 // speakers (see CARRY) to a take that has little above its lowest notes. `lead` is how many
 // seconds the boom is given to itself before the title is said over it.
-const HIT_TAKE = process.env.HIT_TAKE ?? 'd';
+// None is used now: on the machine it was judged on, the start of the boom was lost on the way
+// out whatever was done about it, and it was dropped. HIT_TAKE=d npm run audio puts take d back.
+const HIT_TAKE = process.env.HIT_TAKE ?? '';
 const HITS = {
     a: { dur: 7, influence: 0.65, carry: true, lead: 0.9, text: 'An ominous boom: one deep, dark, slow impact like a distant explosion heard from deep underground, swelling and then decaying into a long menacing low rumble. Horror film. A single boom, no music, no melody, no voices' },
     b: { dur: 7, influence: 0.65, lead: 1.9, text: 'Horror film trailer braam: one massive ominous blast of low brass and sub bass, dissonant and full of dread, with a long cavernous reverb tail. A single blast, no rhythm, no melody, no voices' },

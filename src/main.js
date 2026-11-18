@@ -396,7 +396,7 @@ const HOW = {
 };
 
 const demo = createDemo({ wide: WIDE, him: subjects.him, her: subjects.her });
-const invite = () => showHint(aim.touch ? 'Tap to take the torch' : 'Click to take the torch', 3);
+const invite = () => showHint(aim.touch ? 'Tap to interact' : 'Click to interact', 3);
 let told = false;
 let demoBegan = 0;
 
@@ -560,29 +560,27 @@ if (query.has('demo') && query.get('demo') !== '0') {
     // visitor. A click or a tap at any moment takes the torch, and a line says so once the torch
     // is on. (?demo=0 is the older way in: a short opening, and the torch is handed over.)
     const film = query.get('demo') !== '0';
-    title.ready(aim.touch ? 'Sound on · tap to take the torch' : 'Best with sound · click to take the torch', () => {
+    title.ready(aim.touch ? 'Sound on · tap to interact' : 'Best with sound · click to interact', () => {
         // inside the click: sound may start, and an iPhone may be asked which way it is facing
         sound?.start().catch(() => {});
         aim.enableTilt();
         // everything but the name leaves the card at once: the click has been heard
         title.speak();
-        // The boom and the voice are decoded first, and that, with the machine's sound output
-        // opening (a few tenths of a second on some), is all this waits for: a moment.
+        // The voice is decoded first, and that, with the machine's sound output opening (a few
+        // tenths of a second on some), is all this waits for: a moment.
         // (The rain and the thunder are ready long before the voice has finished.)
         Promise.race([sound ? sound.primed : Promise.resolve(), new Promise(resolve => setTimeout(resolve, 2500))]).then(() => {
-            // One ominous boom, and then the name is said aloud over the title, as the series says
-            // its own on its title screen. The card stays up until the last word is nearly out.
-            // (With no sound, it goes at once.)
-            const lead = sound?.hit() ?? 0;
+            // The name is said aloud over the title, as the series says its own on its title
+            // screen. The card stays up until the last word is nearly out. (With no sound, it
+            // goes at once.) There was a boom before it, for a while: its start was lost on the
+            // way out of one machine whatever was done, and it was taken out.
+            const said = sound?.announce() ?? 0;
             setTimeout(() => {
-                const said = sound?.announce() ?? 0;
-                setTimeout(() => {
-                    title.dismiss();
-                    if (!film) return director.begin();
-                    director.watch();
-                    setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
-                }, Math.max(0, said - 0.3) * 1000);
-            }, lead * 1000);
+                title.dismiss();
+                if (!film) return director.begin();
+                director.watch();
+                setTimeout(() => director.phase === 'demo' && invite(), (demo.torchOn + 2.5) * 1000);
+            }, Math.max(0, said - 0.3) * 1000);
         });
     });
 }
