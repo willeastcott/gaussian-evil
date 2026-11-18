@@ -58,6 +58,7 @@ Wet ground is mostly what it mirrors, and seen from near the ground a flat fill 
 - Wet asphalt has a film of water on it and mirrors too: less, roughly, and most on the face of a stone. From low down it is no longer a black shape beside the water.
 - Water deepens little by little. At its edge the stones stand out of it, so the waterline follows them and is never a clean curve.
 - Ripples too small to see from where the camera is are left out of the surface, where they would only flicker, and blur what the water mirrors instead.
+- The pair stand on it, and it shows (`src/contact.js`). The sky and the lamp that the ground mirrors are worked out in its own shader, which no shadow map reaches, and they used to run right up to the shoes and under them: the two looked pasted on. Now what they hide from the ground is worked out once, when the page loads, from the mesh that casts their shadows (a quarter of a second, one 256 x 256 texture): how much of the sky is hidden from each point, taken in layers by height and each blurred as wide as it is high; whether the lamp is hidden, as an outline of the pair seen from the lamp, so the lamp's glitter has their shadows in it, however long; and where a sole all but touches the ground, which is dark under every light, because a shadow map has to ignore what is very close. `?contact=0` leaves it out.
 - The lamp is mirrored as a streak towards whoever is looking: short and bright on water, long and faint on asphalt. A lamp is far brighter than a screen can show, so how thinly its image is spread is weighed up before its brightness is capped.
 
 ### The reflection
@@ -145,7 +146,7 @@ npm install
 npm run dev
 ```
 
-Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never, which also means the film never starts by itself), `?demo` to open on the film with no title card, `?lamp=0` for no lamp.
+Query options: `?device=webgl2` or `?device=webgpu` to force a device, `?proxy=1` to draw the envelope that receives light over the splats, `?proxy=2` to draw the surface that casts the shadows, `?debug` for a frame-rate readout, `?wet=0` to leave out the reflection (and the life motion; the puddles are then just dark), `?life=0` for the figures as captured, `?rain=0` for no rain, `?splash=0` for rain without splashes, `?lightning=0` for no lightning, `?sound=0` for no sound, `?post=0` to start with the post effects off, `?intro=0` to skip the title card and the opening, `?idle=N` to drift after N seconds left alone (0 for never, which also means the film never starts by itself), `?demo` to open on the film with no title card, `?lamp=0` for no lamp, `?contact=0` for the ground as it was before it knew what stood on it.
 
 ## Render the film to a video
 

@@ -170,7 +170,7 @@
         <p>A splat has the light it was captured in baked into it, and no surface to shade. So a hidden mesh of the pair is built from the splats themselves and lit by ordinary lights. Every pixel of the splats is then multiplied by the light that falls on that mesh. That is what lets a torch light a photograph.</p>
 
         <h3>Shadows that are really cast</h3>
-        <p>The torch is a spot light with a shadow map, held just beside the lens. A second, more exact mesh casts the shadows: an arm across a face, the two of them across the ground. Lightning is another light, from a new part of the sky each time, and the lamp behind them is a third: its shadows are drawn once, since nothing it lights ever moves.</p>
+        <p>The torch is a spot light with a shadow map, held just beside the lens. A second, more exact mesh casts the shadows: an arm across a face, the two of them across the ground. Lightning is another light, from a new part of the sky each time, and the lamp behind them is a third: its shadows are drawn once, since nothing it lights ever moves. What the two of them hide from the ground (the sky, the lamp's glitter, and all light where a sole touches it) is worked out once as the page loads.</p>
 
         <h3>Wet ground</h3>
         <p>The asphalt and its puddles are made in the shader. The reflection is a second, thinner copy of the splats standing upside down beneath the ground, lit to match and seen only where water lies. Rings from the rain bend it.</p>

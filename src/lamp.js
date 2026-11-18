@@ -233,5 +233,5 @@ export function createLamp({ app, rain, ground, layers, mirrorLayers, camera, gl
         }
     });
 
-    return { settings, root, light, mirrorLight, lensMaterial, get level() { return was; } };
+    return { settings, root, light, mirrorLight, lensMaterial, head: headAt, get level() { return was; } };
 }

@@ -28,6 +28,11 @@
 //     so the lamp's image is drawn out into a streak towards whoever is looking. On still water
 //     it is short and bright, on rough wet asphalt long and faint
 //
+// The figures stand on it, and it has to show: what they hide from the ground is baked into a
+// small texture when the page loads (src/contact.js). Where they hide the sky there is less of
+// it to mirror, where they hide the lamp there is none of its image, and where a sole all but
+// touches the ground it is dark under every light.
+//
 // See-through is what makes the reflection. The reflected figures (src/wet-floor.js) are drawn
 // first, on a layer under this one; the ground is drawn over them, opaque where it is asphalt and
 // thin where it is water; the real figures are drawn last. So the reflection shows in the puddles
@@ -75,7 +80,11 @@ uniform float uGroundTime;
 uniform vec4 uGroundStone;      // fine stones per metre, coarse stones per metre, height of the relief (m), ripple slope
 uniform vec4 uGroundLamp;       // where the lamp is, and how strongly its image shows: 0 for no lamp
 uniform vec3 uGroundLampGlow;   // the brightest that image gets, by colour
+uniform sampler2D uGroundContact;   // what stands on the ground (src/contact.js): r how much sky it hides, g how nearly it touches, b (as the lamp sees it) whether it hides the lamp
+uniform vec4 uGroundContactMap;     // 1 / the width of ground that map covers (m); how much is made of the sky hidden, of the touch, of the lamp hidden
+uniform mat4 uGroundLampView;       // from the world to the lamp's view of it
 
+float gTouch;       // 0 .. 1: how dark the ground is for being all but touched
 float gPuddle;      // 0 dry .. 1 standing water, deep enough to lie flat
 float gDamp;        // 1 where the asphalt is soaked, around a puddle
 float gGrain;       // 0 binder .. 1 stone
@@ -94,6 +103,13 @@ void groundEval() {
 
     vec2 lay = groundLie(p);
     gTone = 0.75 + 0.5 * lay.y;
+
+    // what stands here, and whether it stands between here and the lamp
+    vec2 held = texture2D(uGroundContact, p * uGroundContactMap.x + 0.5).rg;
+    float skyHidden = held.r * uGroundContactMap.y;
+    gTouch = held.g * uGroundContactMap.z;
+    vec4 fromLamp = uGroundLampView * vec4(vPositionW, 1.0);
+    float lampHidden = texture2D(uGroundContact, fromLamp.xy / max(fromLamp.w, 0.001)).b * step(0.001, fromLamp.w) * uGroundContactMap.w;
 
     // the stones
     float fine = 1.0 - smoothstep(0.3, 1.0, pixel * uGroundStone.x);
@@ -132,7 +148,7 @@ void groundEval() {
     // water mirrors it whole; the film on wet asphalt a part of it, more where it is soaked and
     // on the face of a stone
     float film = mix(0.1, 0.3, gDamp) * (0.55 + 0.9 * gGrain);
-    gMirror = sky * (fresnel * mix(film, 1.0, gPuddle));
+    gMirror = sky * (fresnel * mix(film, 1.0, gPuddle) * (1.0 - skyHidden));
 
     // The lamp, mirrored. How far its image is drawn out goes by how rough the surface is:
     // water in the rain a good way (it is never still), more where its ripples are too fine to
@@ -150,6 +166,8 @@ void groundEval() {
     // its image is still as bright as the lamp looks when it is spread a little, and only fades
     // when it is spread a lot: the spreading is weighed up first, and the cap put on after.
     float image = lobe * lobe * spread * glance * mix(0.35 + 0.65 * gDamp, 1.0, gPuddle);
+    // (and none of it where the figures stand in the way, or on the ground)
+    image *= (1.0 - lampHidden) * (1.0 - gTouch);
     gMirror += uGroundLampGlow * (1.0 - exp(-image));
 }
 `;
@@ -174,7 +192,8 @@ void getAlbedo() {
     // dark binder and paler stones; darker where it is soaked, and the bed of a puddle darker still
     float tone = mix(0.018, 0.085, gGrain * gGrain) * gTone;
     tone *= mix(1.0, 0.55, gDamp) * mix(1.0, 0.5, gPuddle);
-    dAlbedo = vec3(0.93, 0.97, 1.0) * tone;
+    // under a sole no light gets in, whatever the shadow maps make of it
+    dAlbedo = vec3(0.93, 0.97, 1.0) * tone * (1.0 - gTouch);
 }
 `;
 
@@ -244,7 +263,12 @@ uniform uGroundTime: f32;
 uniform uGroundStone: vec4f;      // fine stones per metre, coarse stones per metre, height of the relief (m), ripple slope
 uniform uGroundLamp: vec4f;       // where the lamp is, and how strongly its image shows: 0 for no lamp
 uniform uGroundLampGlow: vec3f;   // the brightest that image gets, by colour
+var uGroundContact: texture_2d<f32>;    // what stands on the ground (src/contact.js): r how much sky it hides, g how nearly it touches, b (as the lamp sees it) whether it hides the lamp
+var uGroundContactSampler: sampler;
+uniform uGroundContactMap: vec4f;       // 1 / the width of ground that map covers (m); how much is made of the sky hidden, of the touch, of the lamp hidden
+uniform uGroundLampView: mat4x4f;       // from the world to the lamp's view of it
 
+var<private> gTouch: f32;       // 0 .. 1: how dark the ground is for being all but touched
 var<private> gPuddle: f32;      // 0 dry .. 1 standing water, deep enough to lie flat
 var<private> gDamp: f32;        // 1 where the asphalt is soaked, around a puddle
 var<private> gGrain: f32;       // 0 binder .. 1 stone
@@ -265,6 +289,14 @@ fn groundEval() {
 
     let lay = groundLie(p);
     gTone = 0.75 + 0.5 * lay.y;
+
+    // what stands here, and whether it stands between here and the lamp
+    let contactMap = uniform.uGroundContactMap;
+    let held = textureSampleLevel(uGroundContact, uGroundContactSampler, p * contactMap.x + 0.5, 0.0).rg;
+    let skyHidden = held.r * contactMap.y;
+    gTouch = held.g * contactMap.z;
+    let fromLamp = uniform.uGroundLampView * vec4f(vPositionW, 1.0);
+    let lampHidden = textureSampleLevel(uGroundContact, uGroundContactSampler, fromLamp.xy / max(fromLamp.w, 0.001), 0.0).b * step(0.001, fromLamp.w) * contactMap.w;
 
     // the stones
     let fine = 1.0 - smoothstep(0.3, 1.0, pixel * stone.x);
@@ -303,7 +335,7 @@ fn groundEval() {
     // water mirrors it whole; the film on wet asphalt a part of it, more where it is soaked and
     // on the face of a stone
     let film = mix(0.1, 0.3, gDamp) * (0.55 + 0.9 * gGrain);
-    gMirror = sky * (fresnel * mix(film, 1.0, gPuddle));
+    gMirror = sky * (fresnel * mix(film, 1.0, gPuddle) * (1.0 - skyHidden));
 
     // The lamp, mirrored. How far its image is drawn out goes by how rough the surface is:
     // water in the rain a good way (it is never still), more where its ripples are too fine to
@@ -320,7 +352,8 @@ fn groundEval() {
     // A lamp is far brighter than anything it lights, and brighter than a screen can show. So
     // its image is still as bright as the lamp looks when it is spread a little, and only fades
     // when it is spread a lot: the spreading is weighed up first, and the cap put on after.
-    let image = lobe * lobe * spread * glance * mix(0.35 + 0.65 * gDamp, 1.0, gPuddle);
+    // (and none of it where the figures stand in the way, or on the ground)
+    let image = lobe * lobe * spread * glance * mix(0.35 + 0.65 * gDamp, 1.0, gPuddle) * (1.0 - lampHidden) * (1.0 - gTouch);
     gMirror = gMirror + uniform.uGroundLampGlow * (1.0 - exp(-image));
 }
 `;
@@ -345,7 +378,8 @@ fn getAlbedo() {
     // dark binder and paler stones; darker where it is soaked, and the bed of a puddle darker still
     var tone = mix(0.018, 0.085, gGrain * gGrain) * gTone;
     tone = tone * mix(1.0, 0.55, gDamp) * mix(1.0, 0.5, gPuddle);
-    dAlbedo = vec3f(0.93, 0.97, 1.0) * tone;
+    // under a sole no light gets in, whatever the shadow maps make of it
+    dAlbedo = vec3f(0.93, 0.97, 1.0) * tone * (1.0 - gTouch);
 }
 `;
 
@@ -389,8 +423,15 @@ export function createGround({ app, camera, layer }) {
         ripple: 0.045,          // slope of the water's surface
         sky: [0, 0, 0],         // what the wet ground mirrors, overhead; src/lightning.js sets it
         // the lamp it mirrors: where it is, how strongly its image shows, and the brightest that gets, by colour. src/lamp.js sets it
-        lamp: { position: [0, 10, 0], strength: 0, glow: [0, 0, 0] }
+        lamp: { position: [0, 10, 0], strength: 0, glow: [0, 0, 0] },
+        // What stands on the ground: src/contact.js fills in the texture, how far it reaches (m)
+        // and the lamp's view. How much is made of each of its three maps is set here.
+        contact: { texture: null, extent: 1, view: new Float32Array(16), sky: 1, touch: 0.85, lamp: 1 }
     };
+    // until there is one: nothing stands anywhere
+    const nothing = new pc.Texture(app.graphicsDevice, {
+        name: 'ground-contact-none', width: 1, height: 1, format: pc.PIXELFORMAT_RGBA8, mipmaps: false, levels: [new Uint8Array([0, 0, 0, 255])]
+    });
 
     const material = new pc.StandardMaterial();
     material.useMetalness = true;
@@ -429,6 +470,10 @@ export function createGround({ app, camera, layer }) {
         material.setParameter('uGroundStone', [settings.fineStones, settings.coarseStones, settings.relief, settings.ripple]);
         material.setParameter('uGroundLamp', [...settings.lamp.position, settings.lamp.strength]);
         material.setParameter('uGroundLampGlow', settings.lamp.glow);
+        const c = settings.contact;
+        material.setParameter('uGroundContact', c.texture ?? nothing);
+        material.setParameter('uGroundContactMap', [0.5 / c.extent, c.sky, c.touch, c.lamp]);
+        material.setParameter('uGroundLampView', c.view);
     });
 
     return { settings, entity, material };

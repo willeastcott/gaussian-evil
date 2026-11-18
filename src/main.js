@@ -6,7 +6,7 @@
 // lighting at its own pixel. The same spot light also lights the ground, and a slimmer copy of
 // the proxy mesh casts the figures' shadows, on them and onto the ground.
 //
-// Query: ?device=webgl2|webgpu  ?proxy=1 (draw the envelope that receives light over the splats)  ?proxy=2 (draw the surface that casts the shadows)  ?debug (stats)
+// Query: ?device=webgl2|webgpu  ?proxy=1 (draw the envelope that receives light over the splats)  ?proxy=2 (draw the surface that casts the shadows)  ?debug (stats)  ?contact=0 (the ground without what the figures hide from it)
 //        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
 //        ?intro=0 (no title card and no opening: straight to the torch)  ?idle=N (seconds before the scene drifts by itself; 0 for never)  ?mist=0
 //        ?lamp=0 (no lamp behind them)  ?spray=0 (no rain bursting off the two of them)
@@ -29,6 +29,7 @@ import { createDepthAwareRelighting } from './relight-depth.js';
 import { createSplashes } from './splash.js';
 import { createSpray } from './spray.js';
 import { createCasterEntity, createGrownMesh, wrapLight } from './shadow-caster.js';
+import { createContact } from './contact.js';
 import { createTitle } from './title.js';
 import { createWetFloor } from './wet-floor.js';
 
@@ -343,6 +344,11 @@ const lamp = query.get('lamp') === '0' ? null : createLamp({
     camera, glowLayer: ringLayer
 });
 
+// ---- what the two of them hide from the ground they stand on (src/contact.js) ----
+const contact = query.get('contact') === '0' ? null : createContact({
+    device, mesh: surfaceMesh, transform: stage.getWorldTransform(), ground, lamp: lamp?.head ?? null
+});
+
 // ---- sound: rain, wind and thunder, started by the way in or the first click or key ----
 const $ = id => document.getElementById(id);
 const soundButton = $('sound');
@@ -574,5 +580,5 @@ if (import.meta.env.DEV) {
     // rendering the film to a video file (src/capture.js): __sr.capture.run()
     const { createCapture } = await import('./capture.js');
     const capture = createCapture({ pc, app, director, demo, sound, relens: frameLens });
-    window.__sr = { capture, lamp, spray, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
+    window.__sr = { capture, contact, lamp, spray, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
 }
