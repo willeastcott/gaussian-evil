@@ -9,7 +9,7 @@
 // Query: ?device=webgl2|webgpu  ?proxy=1 (draw the envelope that receives light over the splats)  ?proxy=2 (draw the surface that casts the shadows)  ?debug (stats)
 //        ?wet=0 (no reflection, and no life motion)  ?rain=0  ?splash=0  ?lightning=0  ?sound=0  ?post=0  ?life=0 (the figures as captured)
 //        ?intro=0 (no title card and no opening: straight to the torch)  ?idle=N (seconds before the scene drifts by itself; 0 for never)  ?mist=0
-//        ?lamp=0 (no lamp behind them)
+//        ?lamp=0 (no lamp behind them)  ?spray=0 (no rain bursting off the two of them)
 //        ?demo (no title card: the scene plays by itself, as a film, until somebody clicks)  ?demo=0 (Enter hands the torch over after a short opening, with no film)
 import * as pc from 'playcanvas';
 import { CameraControls } from 'playcanvas/scripts/esm/camera-controls.mjs';
@@ -27,6 +27,7 @@ import { createPost } from './post.js';
 import { createRain } from './rain.js';
 import { createDepthAwareRelighting } from './relight-depth.js';
 import { createSplashes } from './splash.js';
+import { createSpray } from './spray.js';
 import { createCasterEntity, createGrownMesh, wrapLight } from './shadow-caster.js';
 import { createTitle } from './title.js';
 import { createWetFloor } from './wet-floor.js';
@@ -320,8 +321,10 @@ const wet = query.get('wet') === '0' ? null : createWetFloor({
 if (wet && query.get('life') === '0') wet.settings.life = 0;
 
 // ---- rain, caught in the torch beam ----
-const rain = query.get('rain') === '0' ? null : createRain({ app, camera, torch, aim: state.aim });
+const rain = query.get('rain') === '0' ? null : createRain({ app, camera, torch, aim: state.aim, relighting });
 const splashes = !rain || query.get('splash') === '0' ? null : createSplashes({ app, camera, rain, ground, ringLayer });
+// ---- and where it lands on the two of them (src/spray.js) ----
+const spray = !rain || query.get('spray') === '0' ? null : createSpray({ app, camera, rain, mesh: surfaceMesh, transform: stage.getWorldTransform() });
 // ---- a low mist over the ground, shown up by the torch and by lightning (src/mist.js) ----
 const mist = !rain || query.get('mist') === '0' ? null : createMist({ app, rain, relighting });
 
@@ -567,5 +570,5 @@ if (import.meta.env.DEV) {
     // rendering the film to a video file (src/capture.js): __sr.capture.run()
     const { createCapture } = await import('./capture.js');
     const capture = createCapture({ pc, app, director, demo, sound, relens: frameLens });
-    window.__sr = { capture, lamp, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
+    window.__sr = { capture, lamp, spray, pc, app, device, camera, controls, relighting, relightDepth, torch, stage, splat, proxy, caster, ground, state, aim, director, title, demo, subjects, views, setView, setRelighting, showHint, toWorld, wet, rain, splashes, mist, lightning, sound, post, setPost };
 }

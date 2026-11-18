@@ -6,8 +6,16 @@
 // so the beam picks a shaft of rain out of the dark. Drops fall through a fixed box around the
 // figures and wrap from the floor back to the top, so there is nothing to simulate or upload.
 //
-// Drawn additively on its own layer after the splats. Drops are not hidden behind the figures
-// (splats write no depth), nor shadowed by them; a lit streak looks the same in front or behind.
+// Drawn additively on its own layer after the splats. Splats write no depth, so nothing would
+// stop a drop that is behind one of the figures from being drawn across it. The lighting
+// texture already holds, for every pixel, how far off the figures' proxy mesh is
+// (src/relight-depth.js), so each pixel of a streak looks itself up there and goes dark if a
+// figure is nearer: the same thing the mist does (src/mist.js). Drops are not shadowed by the
+// figures.
+//
+// A drop of water throws most of the light that strikes it onwards, the way the light was
+// going. So rain between the eye and the lamp is far brighter than rain lit from the eye's own
+// side, and there is a halo of rain round a lamp looked at through it.
 //
 // Because a drop's path is a pure function of its seed and the time, so is the place and moment
 // it hits the ground. The snippets exported here let other shaders (src/splash.js) work that out
@@ -85,6 +93,12 @@ float lampLight(vec3 p) {
     float reach = clamp(1.0 - dist / uLampCone.z, 0.0, 1.0);
     return uLampCone.w * cone * reach * reach;
 }
+
+// how much of that reaches the eye: most where the drop is between the lamp and the eye
+float lampToward(vec3 p, vec3 eye) {
+    float onward = max(dot(normalize(p - uLampPos), normalize(eye - p)), 0.0);
+    return 0.4 + 5.0 * pow(onward, 5.0);
+}
 `;
 
 export const TORCH_WGSL = /* wgsl */`
@@ -111,6 +125,12 @@ fn lampLight(p: vec3f) -> f32 {
     let cone = smoothstep(uniform.uLampCone.y, uniform.uLampCone.x, dot(to / dist, uniform.uLampDir));
     let reach = clamp(1.0 - dist / uniform.uLampCone.z, 0.0, 1.0);
     return uniform.uLampCone.w * cone * reach * reach;
+}
+
+// how much of that reaches the eye: most where the drop is between the lamp and the eye
+fn lampToward(p: vec3f, eye: vec3f) -> f32 {
+    let onward = max(dot(normalize(p - uniform.uLampPos), normalize(eye - p)), 0.0);
+    return 0.4 + 5.0 * pow(onward, 5.0);
 }
 `;
 
@@ -150,7 +170,7 @@ void main(void) {
 
     gl_Position = matrix_viewProjection * vec4(pos, 1.0);
     vShade = vec4(vertex_texCoord0, torchLight(base) * vertex_normal.y, vertex_normal.y);
-    vLamp = lampLight(base) * vertex_normal.y;
+    vLamp = lampLight(base) * lampToward(base, uRainEye) * vertex_normal.y;
 }
 `;
 
@@ -159,13 +179,18 @@ export const STREAK_FRAG_GLSL = /* glsl */`
 uniform vec3 uTorchColor;
 uniform vec3 uFlashColor;   // lightning: lights every drop, wherever it is
 uniform vec3 uLampColor;
+uniform sampler2D uRainFigures;     // the lighting texture: alpha is the distance to the figures, 0 where there are none
+uniform vec4 uRainScreen;           // 1 / width, 1 / height of that texture; metres over which a drop goes behind a figure; whether to look
 varying vec4 vShade;
 varying float vLamp;
 
 void main(void) {
     float edge = 1.0 - vShade.x * vShade.x;
     float tail = sin(vShade.y * 3.14159);
-    gl_FragColor = vec4((uTorchColor * vShade.z + uLampColor * vLamp + uFlashColor * vShade.w) * (edge * tail), 1.0);
+    // a figure nearer than this bit of the streak hides it
+    float figure = texture2DLod(uRainFigures, gl_FragCoord.xy * uRainScreen.xy, 0.0).a;
+    float seen = 1.0 - uRainScreen.w * step(0.0001, figure) * smoothstep(0.0, uRainScreen.z, 1.0 / gl_FragCoord.w - figure);
+    gl_FragColor = vec4((uTorchColor * vShade.z + uLampColor * vLamp + uFlashColor * vShade.w) * (edge * tail * seen), 1.0);
 }
 `;
 
@@ -214,7 +239,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 
     output.position = uniform.matrix_viewProjection * vec4f(pos, 1.0);
     output.vShade = vec4f(vertex_texCoord0, torchLight(base) * vertex_normal.y, vertex_normal.y);
-    output.vLamp = lampLight(base) * vertex_normal.y;
+    output.vLamp = lampLight(base) * lampToward(base, uniform.uRainEye) * vertex_normal.y;
     return output;
 }
 `;
@@ -223,6 +248,9 @@ export const STREAK_FRAG_WGSL = /* wgsl */`
 uniform uTorchColor: vec3f;
 uniform uFlashColor: vec3f;   // lightning: lights every drop, wherever it is
 uniform uLampColor: vec3f;
+var uRainFigures: texture_2d<f32>;      // the lighting texture: alpha is the distance to the figures, 0 where there are none
+var uRainFiguresSampler: sampler;
+uniform uRainScreen: vec4f;   // 1 / width, 1 / height of that texture; metres over which a drop goes behind a figure; whether to look
 varying vShade: vec4f;
 varying vLamp: f32;
 
@@ -231,7 +259,11 @@ fn fragmentMain(input: FragmentInput) -> FragmentOutput {
     var output: FragmentOutput;
     let edge = 1.0 - input.vShade.x * input.vShade.x;
     let tail = sin(input.vShade.y * 3.14159);
-    output.color = vec4f((uniform.uTorchColor * input.vShade.z + uniform.uLampColor * input.vLamp + uniform.uFlashColor * input.vShade.w) * (edge * tail), 1.0);
+    // a figure nearer than this bit of the streak hides it
+    let screen = uniform.uRainScreen;
+    let figure = textureSampleLevel(uRainFigures, uRainFiguresSampler, pcPosition.xy * screen.xy, 0.0).a;
+    let seen = 1.0 - screen.w * step(0.0001, figure) * smoothstep(0.0, screen.z, 1.0 / pcPosition.w - figure);
+    output.color = vec4f((uniform.uTorchColor * input.vShade.z + uniform.uLampColor * input.vLamp + uniform.uFlashColor * input.vShade.w) * (edge * tail * seen), 1.0);
     return output;
 }
 `;
@@ -298,10 +330,11 @@ export function createGlowMaterial(name, sources) {
  * @param {pc.Entity} o.camera - Main camera.
  * @param {pc.Entity} o.torch - The torch.
  * @param {pc.Vec3} o.aim - Point the torch is aimed at, updated by the caller.
+ * @param {object} o.relighting - The GSplatRelighting script: its texture says where the figures are.
  * @returns {object} Settings, the entity made, the drops' seeds, and the list of materials that
  * are given the rain and torch uniforms each frame (others may add theirs).
  */
-export function createRain({ app, camera, torch, aim }) {
+export function createRain({ app, camera, torch, aim, relighting }) {
     const settings = {
         count: 4500,
         halfWidth: 4,       // the box of rain: 8 m square and 5 m tall, centred on the figures
@@ -311,6 +344,7 @@ export function createRain({ app, camera, torch, aim }) {
         streak: 0.18,       // m: how far a drop travels while the shutter is open
         width: 0.003,       // m
         brightness: 0.35,
+        behind: 0.08,       // metres behind a figure's surface by which a drop is gone
         flash: [0, 0, 0],   // light on every drop from lightning; src/lightning.js sets it
         night: [0.012, 0.014, 0.019],   // and from the night itself: very little, but the dark is not empty
         // the lamp behind the pair: where it is, which way it points, its cone, its colour. src/lamp.js sets it
@@ -361,6 +395,11 @@ export function createRain({ app, camera, torch, aim }) {
             light.range, light.intensity * settings.brightness
         ];
         const everywhere = settings.flash.map((c, i) => c + settings.night[i]);
+        // (the texture is only kept up to date while the relighting is on, and only carries
+        // distance in the half-float format)
+        const figures = relighting.texture;
+        const look = relighting.enabled && figures.format === pc.PIXELFORMAT_RGBA16F;
+        const screen = [1 / figures.width, 1 / figures.height, settings.behind, look ? 1 : 0];
         const lamp = settings.lamp;
         for (const m of materials) {
             m.setParameter('uRainTime', time);
@@ -376,6 +415,8 @@ export function createRain({ app, camera, torch, aim }) {
             m.setParameter('uLampDir', lamp.direction);
             m.setParameter('uLampCone', lamp.cone);
             m.setParameter('uLampColor', lamp.color);
+            m.setParameter('uRainFigures', figures);
+            m.setParameter('uRainScreen', screen);
         }
     });
 

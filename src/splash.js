@@ -71,7 +71,7 @@ void main(void) {
     gl_Position = matrix_viewProjection * vec4(pos, 1.0);
     float bright = vertex_normal.y * uSplashOn.y * mix(uSplashOn.z, 1.0, water) * alive;
     vShade = vec4(vertex_texCoord0, torchLight(base) * bright, bright);
-    vLamp = lampLight(base) * bright;
+    vLamp = lampLight(base) * lampToward(base, uRainEye) * bright;
 }
 `;
 
@@ -129,7 +129,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
     output.position = uniform.matrix_viewProjection * vec4f(pos, 1.0);
     let bright = vertex_normal.y * on.y * mix(on.z, 1.0, water) * alive;
     output.vShade = vec4f(vertex_texCoord0, torchLight(base) * bright, bright);
-    output.vLamp = lampLight(base) * bright;
+    output.vLamp = lampLight(base) * lampToward(base, uniform.uRainEye) * bright;
     return output;
 }
 `;

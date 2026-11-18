@@ -295,12 +295,17 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
      * @param {number} [o.width] - In pixels.
      * @param {number} [o.height] - In pixels.
      * @param {number} [o.at] - Seconds into the film: just after its first strike.
+     * @param {boolean} [o.title] - Whether the title is drawn on it.
+     * @param {() => (() => void)|void} [o.setup] - Called when the film has reached `at`, before the
+     * picture is drawn: to show the scene some other way (the capture as it was shot, the mesh
+     * that is lit). What it returns is called afterwards, to put things back.
      * @returns {Promise<string>} 'done' or what went wrong.
      */
-    async function still({ name = 'share.jpg', width = 1200, height = 630, at = 1.62 } = {}) {
+    async function still({ name = 'share.jpg', width = 1200, height = 630, at = 1.62, title = true, setup = null } = {}) {
         if (state.running) return 'busy';
         state.running = true;
         const was = { ratio: device.maxPixelRatio, timeScale: app.timeScale };
+        let undo = null;
         try {
             if (director.phase !== 'demo') throw new Error('open the page with ?demo first');
             director.settings.deaf = true;
@@ -312,7 +317,8 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
             director.seek(0);
             for (let k = 0; k < Math.round(at * 60); k++) app.update(1 / 60);
             app.timeScale = 0;
-            for (let k = 0; k < 4; k++) {
+            undo = setup?.() ?? null;
+            for (let k = 0; k < 6; k++) {
                 app.tick();
                 halt();
                 await nextTask();
@@ -321,12 +327,14 @@ export function createCapture({ pc, app, director, demo, sound, relens }) {
             comp.width = width; comp.height = height;
             const g = comp.getContext('2d');
             g.drawImage(canvas, 0, 0, width, height);
-            drawTitle(g, await titleImage(width, height, 0.46, 0.845), 1);
-            await save(name, await new Promise(resolve => comp.toBlob(resolve, 'image/jpeg', 0.9)));
+            if (title) drawTitle(g, await titleImage(width, height, 0.46, 0.845), 1);
+            const png = name.endsWith('.png');
+            await save(name, await new Promise(resolve => comp.toBlob(resolve, png ? 'image/png' : 'image/jpeg', 0.92)));
             return 'done';
         } catch (e) {
             return String(e?.stack || e);
         } finally {
+            undo?.();
             director.settings.deaf = false;
             free(was.ratio);
             app.timeScale = was.timeScale;
