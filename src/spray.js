@@ -17,12 +17,17 @@
 // along the head and shoulders.
 //
 // A bead is a couple of millimetres across: from four metres off, less than a pixel, and it
-// would not show. So a bead is never drawn narrower than most of a pixel, however far away.
+// would not show. So a bead is never drawn narrower than a part of a pixel, however far away.
+//
+// It is meant to be a hint. The first version had a thousand places, struck every second, three
+// bright beads a time, flaring against the lamp as the rain does: it lit a fiftieth of the
+// picture in a close-up, and the two of them fizzed. This is a small fraction of that: fewer
+// places, struck less often, two dim beads that barely leave the surface, and less of the flare. Measured, it adds about a fortieth of the light the first version did.
 import * as pc from 'playcanvas';
 
 import { STREAK_FRAG_GLSL, STREAK_FRAG_WGSL, TORCH_GLSL, TORCH_WGSL, createGlowMaterial, createSeededQuads } from './rain.js';
 
-const BEADS = 3;        // per strike
+const BEADS = 2;        // per strike
 
 const VERT_GLSL = /* glsl */`
 attribute vec4 vertex_position;     // a place on one of the figures where rain lands, in world space
@@ -34,6 +39,7 @@ uniform float uRainTime;
 uniform vec3 uRainEye;
 uniform vec4 uSpray;        // seconds between strikes at one place, speed up (m/s), speed outwards (m/s), width (m)
 uniform vec4 uSprayOn;      // seconds a bead is seen for, shutter time (s), brightness, the width of a pixel a metre off (m)
+uniform float uSprayFlare;  // how much of the rain's flare against the lamp a bead has, 0..1
 ${TORCH_GLSL}
 varying vec4 vShade;        // across, along, brightness from the torch, and from a flash
 varying float vLamp;        // brightness from the lamp
@@ -67,7 +73,7 @@ void main(void) {
 
     // a bead smeared along its path by the shutter; at the top of its arc it is nearly a dot.
     // Never narrower than most of a pixel
-    float wide = max(uSpray.w, length(uRainEye - base) * uSprayOn.w * 0.7);
+    float wide = max(uSpray.w, length(uRainEye - base) * uSprayOn.w * 0.45);
     float len = max(length(v) * uSprayOn.y, wide * 2.0);
     vec3 along = normalize(v);
     vec3 across = normalize(cross(along, uRainEye - base));
@@ -80,7 +86,7 @@ void main(void) {
     gl_Position = matrix_viewProjection * vec4(pos, 1.0);
     float bright = vertex_normal.y * uSprayOn.z * left;
     vShade = vec4(vertex_texCoord0, torchLight(base) * bright, bright);
-    vLamp = lampLight(base) * lampToward(base, uRainEye) * bright;
+    vLamp = lampLight(base) * mix(1.0, lampToward(base, uRainEye), uSprayFlare) * bright;
 }
 `;
 
@@ -94,6 +100,7 @@ uniform uRainTime: f32;
 uniform uRainEye: vec3f;
 uniform uSpray: vec4f;        // seconds between strikes at one place, speed up (m/s), speed outwards (m/s), width (m)
 uniform uSprayOn: vec4f;      // seconds a bead is seen for, shutter time (s), brightness, the width of a pixel a metre off (m)
+uniform uSprayFlare: f32;     // how much of the rain's flare against the lamp a bead has, 0..1
 ${TORCH_WGSL}
 varying vShade: vec4f;        // across, along, brightness from the torch, and from a flash
 varying vLamp: f32;           // brightness from the lamp
@@ -134,7 +141,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 
     // a bead smeared along its path by the shutter; at the top of its arc it is nearly a dot.
     // Never narrower than most of a pixel
-    let wide = max(spray.w, length(uniform.uRainEye - base) * on.w * 0.7);
+    let wide = max(spray.w, length(uniform.uRainEye - base) * on.w * 0.45);
     let len = max(length(v) * on.y, wide * 2.0);
     let along = normalize(v);
     let across = normalize(cross(along, uniform.uRainEye - base));
@@ -147,7 +154,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
     output.position = uniform.matrix_viewProjection * vec4f(pos, 1.0);
     let bright = vertex_normal.y * on.z * left;
     output.vShade = vec4f(vertex_texCoord0, torchLight(base) * bright, bright);
-    output.vLamp = lampLight(base) * lampToward(base, uniform.uRainEye) * bright;
+    output.vLamp = lampLight(base) * mix(1.0, lampToward(base, uniform.uRainEye), uniform.uSprayFlare) * bright;
     return output;
 }
 `;
@@ -163,16 +170,17 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
  */
 export function createSpray({ app, camera, rain, mesh, transform }) {
     const settings = {
-        places: 1000,       // where rain is seen to land
+        places: 350,        // where rain is seen to land
         facing: 0.55,       // how nearly a surface must face the sky to be one (the y of its normal)
         above: 0.75,        // metres: none lower than this (the ground has its own splashes)
-        every: 1.1,         // seconds between strikes at one place, about
-        up: 1.1,            // m/s: how hard a bead is thrown upwards, at most
-        out: 0.4,           // m/s outwards
-        life: 0.22,         // seconds a bead is seen for
+        every: 2.4,         // seconds between strikes at one place, about
+        up: 0.7,            // m/s: how hard a bead is thrown upwards, at most
+        out: 0.3,           // m/s outwards
+        life: 0.16,         // seconds a bead is seen for
         shutter: 0.02,      // s: the smear of a moving bead
-        width: 0.0026,      // m
-        brightness: 1.1     // relative to a rain streak
+        width: 0.002,       // m
+        brightness: 0.9,    // relative to a rain streak
+        flare: 0.6          // how much of the rain's flare against the lamp a bead has
     };
 
     // every point of the surface that faces the sky
@@ -218,6 +226,7 @@ export function createSpray({ app, camera, rain, mesh, transform }) {
         material.setParameter('uSpray', [settings.every, settings.up, settings.out, settings.width]);
         const pixel = 2 * Math.tan(camera.camera.fov * 0.5 * pc.math.DEG_TO_RAD) / Math.max(app.graphicsDevice.height, 1);
         material.setParameter('uSprayOn', [settings.life, settings.shutter, settings.brightness, pixel]);
+        material.setParameter('uSprayFlare', settings.flare);
     });
 
     return { settings, entity, material, places: count, available };
