@@ -1,8 +1,7 @@
 // The title card: what is on screen while the scene loads, and the way in.
 //
-// A browser will not play sound, nor an iPhone say which way it is facing, until the visitor has
-// clicked or tapped something. So the way in is a button, and everything that needs that click is
-// started from it.
+// A browser will not play sound until the visitor has clicked or tapped something. So the way in
+// is a button, and the sound is started from it.
 
 /**
  * @returns {object} progress(), ready(), speak() and dismiss().
@@ -25,8 +24,7 @@ export function createTitle() {
          * The scene is loaded and drawing: swap the bar for the way in.
          *
          * @param {string} advice - A line to go under the button.
-         * @param {() => void} onEnter - Called inside the click, so it may start sound and ask
-         * for the phone's orientation.
+         * @param {() => void} onEnter - Called inside the click, so it may start sound.
          */
         ready(advice, onEnter) {
             root.classList.add('ready');

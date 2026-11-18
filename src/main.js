@@ -282,7 +282,7 @@ const state = {
     smoothing: 12
 };
 // where the visitor points it: mouse, tap, or the way a phone is turned (src/aim.js)
-const aim = createAim({ canvas, camera, start: [0.5, 0.36] });
+const aim = createAim({ canvas, start: [0.5, 0.36] });
 
 const HAND_FULL_DISTANCE = 3;      // metres from the subject at which the torch is held out fully
 
@@ -391,8 +391,7 @@ function showHint(text, seconds = 0) {
 }
 const HOW = {
     mouse: 'Move to aim the torch · drag to look around · scroll to zoom',
-    touch: 'Tap to aim the torch · drag to look around · pinch to zoom',
-    tilt: 'Turn your phone to aim the torch · drag to look around · pinch to zoom'
+    touch: 'Tap to aim the torch · drag to look around · pinch to zoom'
 };
 
 const demo = createDemo({ wide: WIDE, him: subjects.him, her: subjects.her });
@@ -561,9 +560,8 @@ if (query.has('demo') && query.get('demo') !== '0') {
     // is on. (?demo=0 is the older way in: a short opening, and the torch is handed over.)
     const film = query.get('demo') !== '0';
     title.ready(aim.touch ? 'Sound on · tap to interact' : 'Best with sound · click to interact', () => {
-        // inside the click: sound may start, and an iPhone may be asked which way it is facing
+        // inside the click: sound may start
         sound?.start().catch(() => {});
-        aim.enableTilt();
         // everything but the name leaves the card at once: the click has been heard
         title.speak();
         // The voice is decoded first, and that, with the machine's sound output opening (a few
