@@ -44,6 +44,31 @@ const THUNDER = {
 };
 const GROANS = ['groan-a', 'groan-b', 'groan-c', 'groan-d'];
 const FIRST = ['enter-hit', 'title-voice'];       // what is played the moment the way in is taken
+
+// A new context says it is running at once, but the machine's sound output is not open yet: on a
+// laptop it took 0.4 s (its clock stood still, then jumped). What is played in that time is
+// lost, or faded in with the output: a boom, which is all attack, came out with its start cut
+// off. So nothing is played on the way in until this much sound (seconds: silence) has really
+// gone out, by the context's own account of what has reached the output.
+const SETTLE = 0.05;
+const OPEN_BY = 1200;       // milliseconds: if it has not opened by then, there is no knowing when
+
+/**
+ * @param {AudioContext} ctx - A context, just made.
+ * @returns {Promise<void>} Resolves when its sound is reaching the output.
+ */
+function flowing(ctx) {
+    const began = performance.now();
+    return new Promise((resolve) => {
+        const look = () => {
+            // (where a browser cannot say what has gone out, its clock less a usual delay)
+            const out = ctx.getOutputTimestamp ? ctx.getOutputTimestamp().contextTime ?? 0 : ctx.currentTime - 0.1;
+            if ((ctx.state === 'running' && out >= SETTLE) || performance.now() - began > OPEN_BY) resolve();
+            else setTimeout(look, 10);
+        };
+        look();
+    });
+}
 const dbToGain = db => Math.pow(10, db / 20);
 
 /**
@@ -130,7 +155,9 @@ export function createSoundscape({ app, camera, rain, button }) {
         // What is played on the way in comes first: a boom that answers a button has to come at
         // once, not when a minute of rain has been decoded as well.
         await Promise.all(FIRST.map(decode));
-        primedNow();
+        // ...and not before the output is open to play them through (not asked of a rendering)
+        if (ctx instanceof AudioContext) flowing(ctx).then(primedNow);
+        else primedNow();
         await Promise.all(Object.keys(raw).filter(name => !FIRST.includes(name)).map(decode));
 
         for (const [name, b] of Object.entries(BEDS)) {
@@ -346,7 +373,8 @@ export function createSoundscape({ app, camera, rain, button }) {
     // resolves once everything is decoded and playing, whichever call got there first
     let building = null;
     let never = true;       // it has not been started before
-    // resolves as soon as the sounds of the way in can be played, which is long before that
+    // resolves as soon as the sounds of the way in can be played (they are decoded, and the
+    // output is open), which is long before that
     let primedNow = () => {};
     const primed = new Promise((resolve) => { primedNow = resolve; });
     async function start() {
@@ -366,8 +394,11 @@ export function createSoundscape({ app, camera, rain, button }) {
             master.connect(analyser).connect(ctx.destination);
             building = build();
         }
+        // (asked for here, inside the click or the tap: a context made on a touch that was not
+        // yet a tap is held back until one, and must not wait for the decoding to be let go)
+        ctx.resume().catch(() => {});
         await building;
-        await ctx.resume();
+        if (!document.hidden) await ctx.resume();
         // turned back on, it comes up gently
         if (!never) {
             master.gain.cancelScheduledValues(ctx.currentTime);
@@ -397,6 +428,26 @@ export function createSoundscape({ app, camera, rain, button }) {
     window.addEventListener('keydown', first, true);
     button?.addEventListener('click', () => (on ? stop() : start()));
     show();
+
+    // A tab nobody is looking at makes no sound. The picture stops by itself when the tab is
+    // hidden (the browser stops asking for frames); the sound has to be told. It is stopped
+    // dead, clock and all, and comes back up quickly, not with a bang, when the tab is looked at
+    // again: if it was on. (Not while a film's sound is being rendered: that context is not this one.)
+    let away = false;
+    document.addEventListener('visibilitychange', () => {
+        if (!(ctx instanceof AudioContext)) return;
+        if (document.hidden) {
+            away = true;
+            ctx.suspend();
+        } else if (away) {
+            away = false;
+            if (!on) return;
+            master.gain.cancelScheduledValues(ctx.currentTime);
+            master.gain.setValueAtTime(0, ctx.currentTime);
+            master.gain.setTargetAtTime(settings.volume, ctx.currentTime, 0.2);
+            ctx.resume();
+        }
+    });
 
     /**
      * Render to a buffer instead of playing. From now until render() is called, the updates of

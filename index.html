@@ -77,29 +77,36 @@
         /* ---- on screen once the torch is yours; gone again while the scene drifts on its own ---- */
         .chrome { opacity: 0; transition: opacity 1.4s ease; }
         body[data-phase="live"] .chrome { opacity: 1; }
-        #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 64px; top: max(16px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
-        #label b { display: block; font-weight: 400; font-size: 17px; letter-spacing: 0.04em; opacity: 0.85; }
-        #label small { display: block; margin-top: 6px; font-size: 11px; color: var(--faint); }
-        body[data-phase="live"] #label a { pointer-events: auto; }
+        /* the name, in a row as high as a button. (The credits are in the panel that the last button of the bottom row opens.) */
+        #label { position: fixed; left: max(18px, env(safe-area-inset-left)); right: 18px; top: max(8px, env(safe-area-inset-top)); pointer-events: none; text-shadow: 0 1px 6px #000; }
+        #label b { display: block; height: 44px; font-weight: 400; font-size: clamp(26px, 2.8vw, 34px); line-height: 44px; letter-spacing: 0.04em; white-space: nowrap; opacity: 0.85; }
+        /* under the name: what it is made with, and that engine's own mark, in the red of the name's G and E */
+        #made { display: inline-flex; align-items: center; gap: 8px; margin-top: -1px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none; color: var(--dim); transition: color 0.2s; }
+        #made svg { width: auto; height: 16px; fill: #c8141b; opacity: 0.85; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8)); }
+        body[data-phase="live"] #made { pointer-events: auto; }
+        #made:hover, #made:focus-visible { color: #fff; }
         #hud { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end; padding: 40px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent); pointer-events: none; }
         #hud nav, #hud div { display: flex; align-items: center; }
         #hud button { display: grid; place-items: center; min-width: 44px; height: 44px; padding: 0 12px; color: var(--dim); transition: color 0.2s; }
         body[data-phase="live"] #hud button { pointer-events: auto; }
         #hud button:hover, #hud button:focus-visible { color: #fff; }
-        #hud nav button { font-size: 11px; letter-spacing: 0.22em; text-indent: 0.22em; text-transform: uppercase; }
-        /* five buttons and three shots have to fit across a phone */
-        @media (max-width: 420px) { #hud button { min-width: 40px; padding: 0 8px; } #hud nav button { min-width: 0; padding: 0 6px; } }
-        #hud svg, #about svg, #info-close svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+        /* The shots' names look as tall as the icons beside them. A capital of this face is 0.58 of its size, and a row of capitals is a solid block with flat edges, where an icon is a thin outline that reaches its full 15 px only at a point or the top of a curve: capitals of the same 15 px look taller. So they are smaller: 11 px, which is what looks level with the icons. */
+        #hud nav button { font-size: 18.7px; line-height: 1; letter-spacing: 0.04em; text-indent: 0.04em; text-transform: uppercase; }
+        /* six buttons and three shots have to fit across a phone: the letters keep their height and close up */
+        @media (max-width: 480px) { #hud button { min-width: 40px; padding: 0 8px; } #hud nav button { min-width: 0; padding: 0 5px; letter-spacing: 0; text-indent: 0; transform: scaleX(0.8); margin: 0 -5px; } }
+        /* ...and across the narrowest phones there are */
+        @media (max-width: 359px) { #hud button { min-width: 34px; padding: 0 4px; } #hud nav button { font-size: 16px; padding: 0 5px; } }
+        #hud svg, #info-close svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
         #sound[aria-pressed="true"] .off, #sound[aria-pressed="false"] .on { display: none; }
         #relight[aria-pressed="false"] { color: #fff; }
         #relight .half { fill: currentColor; stroke: none; }
+        /* Beside that half-filled disc a thin i in a ring of the same size looked fainter and smaller: a filled shape reads brighter, and bigger, than an outline. So the i is drawn heavy, and its ring a little wider. */
+        #about .stem { stroke-width: 2.3; }
+        #about .dot { fill: currentColor; stroke: none; }
         #hint { position: fixed; left: 16px; right: 16px; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 60px); margin: 0; text-align: center; font-size: 12px; letter-spacing: 0.1em; text-shadow: 0 1px 6px #000; opacity: 0; transition: opacity 1s ease; pointer-events: none; }
         #hint.on { opacity: 0.85; }
         #stats { position: fixed; right: 12px; top: 58px; opacity: 0.6; font-variant-numeric: tabular-nums; text-align: right; white-space: pre; pointer-events: none; }
         /* ---- how it is done: a button in the corner, and a panel that comes in from the side ---- */
-        #about { position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; color: var(--dim); pointer-events: none; transition: opacity 1.4s ease, color 0.2s; }
-        body[data-phase="live"] #about { pointer-events: auto; }
-        #about:hover, #about:focus-visible { color: #fff; }
         #info { position: fixed; top: 0; right: 0; bottom: 0; z-index: 5; box-sizing: border-box; width: min(400px, 100vw); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: thin; scrollbar-color: rgba(232, 230, 225, 0.25) transparent; padding: max(26px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-right)) max(30px, env(safe-area-inset-bottom)) 28px; background: rgba(5, 6, 8, 0.84); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-left: 1px solid rgba(232, 230, 225, 0.1); -webkit-user-select: text; user-select: text; transform: translateX(100%); visibility: hidden; transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s 0.45s; }
         #info.open { transform: none; visibility: visible; transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s; }
         #info-close { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; color: var(--dim); transition: color 0.2s; }
@@ -109,6 +116,7 @@
         #info h3 { margin: 26px 0 6px; font: 700 13px/1.4 var(--type); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
         #info p { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(232, 230, 225, 0.76); }
         #info .links { margin-top: 30px; padding-top: 18px; border-top: 1px solid rgba(232, 230, 225, 0.12); font-size: 12px; line-height: 2; }
+        #info p a { color: var(--ink); }
         #info .links a { display: block; color: var(--ink); text-decoration: none; }
         #info .links a:hover { text-decoration: underline; }
         @media (prefers-reduced-motion: reduce) { #info, #info.open { transition: none; } }
@@ -123,7 +131,10 @@
 
     <div id="label" class="chrome">
         <b class="wordmark"><i>G</i>aussian <i>E</i>vil</b>
-        <small>Capture: <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">Adrian Cuesta, Dymensium</a> (CC BY 4.0) · relit live with PlayCanvas</small>
+        <a id="made" href="https://playcanvas.com" target="_blank" rel="noopener">
+            <svg viewBox="10.5 5.4 10.7 22" aria-hidden="true"><polyline points="10.973 5.899 20.701 11.539 10.972 17.18 10.973 14.359 15.783 11.539 10.972 8.72 10.973 5.899"/><polyline points="20.7 14.452 10.972 20.092 20.701 25.733 20.7 22.911 15.89 20.092 20.701 17.272 20.7 14.452"/></svg>
+            Made with PlayCanvas
+        </a>
     </div>
 
     <div id="hud" class="chrome">
@@ -148,49 +159,50 @@
             <button id="fullscreen" title="Full screen (F)" aria-label="Full screen">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
             </button>
+            <button id="about" title="How it works (I)" aria-label="How it works" aria-expanded="false" aria-controls="info">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.6"/><path class="stem" d="M12 11.2v5.6"/><circle class="dot" cx="12" cy="7.4" r="1.4"/></svg>
+            </button>
         </div>
     </div>
     <p id="hint" role="status"></p>
     <div id="stats"></div>
 
-    <button id="about" class="chrome" title="How it works (I)" aria-label="How it works" aria-expanded="false" aria-controls="info">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.3"/></svg>
-    </button>
     <aside id="info" aria-label="How it works" inert>
         <button id="info-close" aria-label="Close">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
         <h2>How it works</h2>
-        <p class="lede">None of this is video. Every frame is drawn live, in your browser.</p>
+        <p class="lede">Rendered live in your browser. No video.</p>
 
-        <h3>Two people, as Gaussian splats</h3>
-        <p>The figures are a volumetric capture of two actors, held as 674,612 Gaussian splats: soft, coloured blobs that add up to a photograph you can walk around.</p>
+        <h3>Capture</h3>
+        <p>A volumetric capture of two actors: 674,612 Gaussian splats.</p>
 
-        <h3>Lit after the fact</h3>
-        <p>A splat has the light it was captured in baked into it, and no surface to shade. So a hidden mesh of the pair is built from the splats themselves and lit by ordinary lights. Every pixel of the splats is then multiplied by the light that falls on that mesh. That is what lets a torch light a photograph.</p>
+        <h3>Relighting</h3>
+        <p>Splats carry the light they were captured in and have no surface to shade. A hidden mesh, built from the splats, is lit by standard lights. Each splat pixel is multiplied by the light on that mesh.</p>
 
-        <h3>Shadows that are really cast</h3>
-        <p>The torch is a spot light with a shadow map, held just beside the lens. A second, more exact mesh casts the shadows: an arm across a face, the two of them across the ground. Lightning is another light, from a new part of the sky each time, and the lamp behind them is a third: its shadows are drawn once, since nothing it lights ever moves. What the two of them hide from the ground (the sky, the lamp's glitter, and all light where a sole touches it) is worked out once as the page loads.</p>
+        <h3>Lights and shadows</h3>
+        <p>Three shadow-mapped lights: the torch (spot), lightning (directional) and the lamp (spot, shadow map drawn once). A second, more detailed mesh casts the shadows. Contact shadows on the ground are baked when the page loads.</p>
 
         <h3>Wet ground</h3>
-        <p>The asphalt and its puddles are made in the shader. The reflection is a second, thinner copy of the splats standing upside down beneath the ground, lit to match and seen only where water lies. Rings from the rain bend it.</p>
+        <p>Asphalt and puddles are one procedural shader. The reflection is a mirrored copy of the splats (236,000) under the ground, seen through the water.</p>
 
         <h3>Rain and mist</h3>
-        <p>4,500 drops fall, and each one's splash is worked out from where it has to land, with nothing simulated. Rain and mist are dark until the torch or the lightning finds them, which is why you can see the beam in the air. Rain between you and the lamp flares, because water throws light onwards. Rain behind the two of them is hidden by them, and here and there a drop bursts where it lands on them. Splats have no depth of their own, so the mist looks up how far off the figures are, pixel by pixel, to pass behind them.</p>
+        <p>4,500 drops in one mesh. Each splash is computed from where its drop lands; nothing is simulated. Rain and mist are lit by the torch, the lamp and lightning, and hidden behind the figures by a depth lookup.</p>
 
-        <h3>A little life</h3>
-        <p>A capture is one frozen instant. Here the two of them breathe and sway by a few millimetres, and the wind moves her hair and the hem of her dress.</p>
+        <h3>Motion</h3>
+        <p>Breathing, sway and wind are small displacements in the vertex shader.</p>
 
-        <h3>Sound to match</h3>
-        <p>Thunder arrives late by the distance of the strike, and from its side of the sky. The rain is three recordings layered; the wind is synthesised, and follows the same gusts that move her hair.</p>
+        <h3>Sound</h3>
+        <p>Three rain loops and synthesised wind. Thunder is delayed and panned by each strike's distance and direction.</p>
 
-        <h3>In a browser</h3>
-        <p>It runs on the PlayCanvas engine, on WebGPU where there is one and WebGL 2 where there is not. About 19 MB to download, and nothing to install.</p>
+        <h3>Engine</h3>
+        <p>PlayCanvas, on WebGPU with WebGL 2 as fallback. About 23 MB to download.</p>
+
+        <h3>Credits</h3>
+        <p>Capture: <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">Adrian Cuesta, Dymensium</a> (CC BY 4.0). Made with <a href="https://playcanvas.com" target="_blank" rel="noopener">PlayCanvas</a>.</p>
 
         <p class="links">
             <a href="https://github.com/willeastcott/gaussian-evil" target="_blank" rel="noopener">Source code on GitHub</a>
-            <a href="https://superspl.at/scene/67841e9d" target="_blank" rel="noopener">The capture on SuperSplat, by Adrian Cuesta, Dymensium (CC BY 4.0)</a>
-            <a href="https://playcanvas.com" target="_blank" rel="noopener">PlayCanvas</a>
         </p>
     </aside>
 

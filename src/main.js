@@ -475,7 +475,19 @@ function setRelighting(on) {
     $('relight').setAttribute('aria-pressed', String(on));
     showHint(on ? '' : 'The capture as it was shot, without the torch');
 }
-const toggleFullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+// Full screen is offered only where the browser can do it: an iPhone cannot, nor can a page in a
+// frame that has not been allowed to. And a browser that says it can and then will not (some
+// embedded ones) is taken at its deed: the button goes the first time it is refused.
+const canFullscreen = () => document.fullscreenEnabled === true && typeof document.documentElement.requestFullscreen === 'function';
+let fullscreenRefused = false;
+const toggleFullscreen = () => {
+    if (document.fullscreenElement) return document.exitFullscreen();
+    if (!canFullscreen() || fullscreenRefused) return undefined;
+    return document.documentElement.requestFullscreen().catch(() => {
+        fullscreenRefused = true;
+        $('fullscreen').hidden = true;
+    });
+};
 document.querySelectorAll('button[data-view]').forEach((b) => {
     b.addEventListener('click', () => setView(/** @type {HTMLElement} */ (b).dataset.view));
 });
@@ -487,9 +499,10 @@ $('strike').addEventListener('click', strikeNear);
 $('strike').hidden = !lightning;
 $('play').addEventListener('click', () => director.watch());
 $('fullscreen').addEventListener('click', toggleFullscreen);
-$('fullscreen').hidden = !document.fullscreenEnabled;
+$('fullscreen').hidden = !canFullscreen();
 // a button that keeps the focus would take the next press of Space for itself
-$('hud').addEventListener('click', () => /** @type {HTMLElement} */ (document.activeElement)?.blur());
+// (but not the one that opens the panel: the focus has gone to the panel's own button)
+$('hud').addEventListener('click', () => info.classList.contains('open') || /** @type {HTMLElement} */ (document.activeElement)?.blur());
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && info.classList.contains('open')) {
         setInfo(false);
@@ -498,7 +511,7 @@ window.addEventListener('keydown', (e) => {
     if (e.repeat || e.target instanceof HTMLButtonElement) return;
     const phase = director.phase;
     // (the film is worth the whole screen, so F works while it plays)
-    if (e.code === 'KeyF' && (phase === 'live' || phase === 'demo') && document.fullscreenEnabled) toggleFullscreen();
+    if (e.code === 'KeyF' && (phase === 'live' || phase === 'demo') && canFullscreen()) toggleFullscreen();
     if (phase !== 'live') return;
     if (e.code === 'Space') setRelighting(!relighting.enabled);
     if (e.code === 'KeyL') strikeNear();
@@ -553,7 +566,8 @@ if (query.has('demo') && query.get('demo') !== '0') {
         aim.enableTilt();
         // everything but the name leaves the card at once: the click has been heard
         title.speak();
-        // The boom and the voice are decoded first, and that is all this waits for: a moment.
+        // The boom and the voice are decoded first, and that, with the machine's sound output
+        // opening (a few tenths of a second on some), is all this waits for: a moment.
         // (The rain and the thunder are ready long before the voice has finished.)
         Promise.race([sound ? sound.primed : Promise.resolve(), new Promise(resolve => setTimeout(resolve, 2500))]).then(() => {
             // One ominous boom, and then the name is said aloud over the title, as the series says
